@@ -223,6 +223,32 @@ if(APPLE)
     set_target_properties(tidal-wave PROPERTIES OUTPUT_NAME "Tidal Wave")
 endif()
 
+# ── Self-contained macOS bundle ──────────────────────────────────────────────
+# `cmake --build build --target deploy` bundles Qt and libmpv into the .app so
+# it runs without Homebrew. The work is in packaging/macos-deploy.sh, which also
+# verifies afterwards that nothing still resolves to /opt/homebrew.
+if(APPLE)
+    find_program(MACDEPLOYQT_EXE macdeployqt HINTS "${QT_HOST_PATH}/bin" "/opt/homebrew/bin")
+    find_program(DYLIBBUNDLER_EXE dylibbundler HINTS "/opt/homebrew/bin")
+
+    if(MACDEPLOYQT_EXE AND DYLIBBUNDLER_EXE)
+        add_custom_target(deploy
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos-deploy.sh
+                    "$<TARGET_BUNDLE_DIR:tidal-wave>"
+                    "${MACDEPLOYQT_EXE}" "${DYLIBBUNDLER_EXE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/qml"
+            DEPENDS tidal-wave
+            COMMENT "Bundling Qt + libmpv into the .app"
+            VERBATIM)
+    else()
+        add_custom_target(deploy
+            COMMAND ${CMAKE_COMMAND} -E echo
+                "deploy needs macdeployqt and dylibbundler (brew install dylibbundler)"
+            COMMAND ${CMAKE_COMMAND} -E false
+            VERBATIM)
+    endif()
+endif()
+
 include(GNUInstallDirs)
 
 install(TARGETS tidal-wave
@@ -262,7 +288,7 @@ if(UNIX AND NOT APPLE)
     set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
     set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
     set(CPACK_DEBIAN_PACKAGE_DEPENDS
-        "libqt6core6, libqt6gui6, libqt6widgets6, libqt6quick6, libqt6qml6, libqt6network6, libqt6dbus6, libqt6sql6, libqt6svg6, libqt6sql6-sqlite, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window, qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, libasound2, libavahi-client3")
+        "libqt6core6, libqt6gui6, libqt6widgets6, libqt6quick6, libqt6qml6, libqt6network6, libqt6dbus6, libqt6sql6, libqt6svg6, libqt6sql6-sqlite, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window, qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, libasound2, libavahi-client3, libmpv2 | libmpv1")
     set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "ffmpeg")
     # Let dpkg-shlibdeps refine the library deps automatically where possible.
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
