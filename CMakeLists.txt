@@ -93,7 +93,8 @@ if(Qt6_VERSION VERSION_GREATER_EQUAL 6.8)
     qt_policy(SET QTP0004 NEW)
 endif()
 
-set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Theme.qml qml/components/DragState.qml
+                            PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(tidal-wave
     URI TidalWave
@@ -105,6 +106,8 @@ qt_add_qml_module(tidal-wave
         qml/components/SideBar.qml
         qml/components/TrackRow.qml
         qml/components/TrackSelection.qml
+        qml/components/DragScrollEdge.qml
+        qml/components/DragState.qml
         qml/components/MediaCard.qml
         qml/components/BackButton.qml
         qml/components/PillButton.qml
