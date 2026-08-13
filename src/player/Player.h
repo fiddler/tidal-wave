@@ -6,10 +6,12 @@
 #include <QTemporaryFile>
 #include "api/TidalClient.h"
 #include "api/Models.h"
+#include <memory>
 
 class QNetworkReply;
 class CastSession;
 class DashFetcher;
+class DashStream;
 
 class Player : public QObject {
     Q_OBJECT
@@ -184,6 +186,9 @@ private:
     bool                 m_castPlaying   = false;
     QTemporaryFile      *m_mpdTempFile    = nullptr;
     QNetworkReply       *m_activeDownload = nullptr;
+    // The DASH stream mpv is reading segments from. Retired on every track
+    // change so a blocked reader is released.
+    std::shared_ptr<DashStream> m_activeStream;
 
     // Preload state for the next queued track
     int                  m_preloadIndex    = -1;

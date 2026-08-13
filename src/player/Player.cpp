@@ -8,6 +8,7 @@
 #include "cast/CastSession.h"
 #include "DashFetcher.h"
 #include "MpvAudio.h"
+#include "DashStream.h"
 #include <algorithm>
 #include <numeric>
 #include <QRandomGenerator>
@@ -433,6 +434,11 @@ void Player::loadAndPlay(int index, qint64 startMs) {
         dl->deleteLater();
     }
 
+    if (m_activeStream) {
+        DashStream::retire(m_activeStream);
+        m_activeStream.reset();
+    }
+
     if (m_mpdTempFile) {
         m_mpdTempFile->remove();
         delete m_mpdTempFile;
@@ -531,6 +537,8 @@ void Player::loadAndPlay(int index, qint64 startMs) {
             }
             m_streamedQuality = manifest.codec;
             emit currentTrackChanged();
+            qInfo() << "[play] track" << loadingTrackId << "quality" << manifest.codec
+                    << "manifest" << (manifest.type == StreamManifest::BTS ? "BTS" : "DASH");
 
             if (manifest.type == StreamManifest::BTS) {
                 m_activeDownload = m_client->fetchRaw(QUrl(manifest.url), [this, loadingTrackId](QByteArray data, QString err) {
@@ -561,23 +569,19 @@ void Player::loadAndPlay(int index, qint64 startMs) {
                     }
                 });
             } else {
-                m_mpdTempFile = new QTemporaryFile(
-                    QDir::tempPath() + QStringLiteral("/tidal-wave-XXXXXX.mpd"));
-                m_mpdTempFile->setAutoRemove(false);
-                if (m_mpdTempFile->open()) {
-                    m_mpdTempFile->write(manifest.url.toUtf8());
-                    m_mpdTempFile->flush();
-                    m_mpdTempFile->close();
-                    // Casting may have started while this fetch was in flight;
-                    // if so, hand off to the device instead of playing locally.
-                    if (casting()) { setLoading(false); emit castTrackChanged(); return; }
-                    m_player->setSource(QUrl::fromLocalFile(m_mpdTempFile->fileName()));
-                    m_player->play();
-                } else {
+                // DASH (lossless and hi-res). mpv pulls segments through the
+                // tidalstream protocol as it needs them, so playback starts
+                // after roughly one segment rather than the whole ~30 MB track.
+                auto stream = DashStream::create(manifest.url);
+                if (!stream) {
                     setLoading(false);
-                    emit error("Failed to write MPD temp file");
+                    emit error(tr("Could not read the lossless stream manifest."));
                     return;
                 }
+                m_activeStream = stream;
+                if (casting()) { setLoading(false); emit castTrackChanged(); return; }
+                m_player->setSource(stream->url());
+                m_player->play();
             }
         });
 }

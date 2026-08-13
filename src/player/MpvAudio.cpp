@@ -7,6 +7,8 @@
 
 #include <clocale>
 
+#include "DashStream.h"
+
 namespace {
 
 // Called from libmpv's own thread. Nothing here may touch Qt state directly —
@@ -53,6 +55,10 @@ MpvAudio::MpvAudio(QObject *parent) : QObject(parent) {
         m_mpv = nullptr;
         return;
     }
+
+    // Lets Player hand mpv a tidalstream:// URL that pulls DASH segments on
+    // demand instead of a fully downloaded file.
+    DashStream::install(m_mpv);
 
     mpv_observe_property(m_mpv, 0, "pause",       MPV_FORMAT_FLAG);
     mpv_observe_property(m_mpv, 0, "idle-active", MPV_FORMAT_FLAG);

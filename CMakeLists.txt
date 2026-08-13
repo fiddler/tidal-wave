@@ -49,6 +49,7 @@ set(SOURCES
     src/player/Player.cpp
     src/player/MpvAudio.cpp
     src/player/DashFetcher.cpp
+    src/player/DashStream.cpp
     src/player/Downloader.cpp
     src/library/LocalLibrary.cpp
     src/mpris/MprisPlayer.cpp
@@ -65,6 +66,7 @@ set(HEADERS
     src/player/Player.h
     src/player/MpvAudio.h
     src/player/DashFetcher.h
+    src/player/DashStream.h
     src/player/Downloader.h
     src/library/LocalLibrary.h
     src/mpris/MprisPlayer.h
