@@ -81,6 +81,14 @@ Item {
             return "M 12 2 A 10 10 0 1 0 12 22 A 10 10 0 1 0 12 2 M 12 6 V 12 L 16 14"
         case "queue":
             return "M 4 6 H 20 M 4 12 H 20 M 4 18 H 20"
+        case "plus":
+            return "M 12 5 V 19 M 5 12 H 19"
+        case "folder-plus":
+            return "M 3 19 V 6 A 2 2 0 0 1 5 4 H 9.5 L 11.5 7 H 19 A 2 2 0 0 1 21 9 V 19 A 2 2 0 0 1 19 21 H 5 A 2 2 0 0 1 3 19 Z M 12 11 V 17 M 9 14 H 15"
+        case "list-plus":
+            return "M 3 6 H 14 M 3 12 H 11 M 3 18 H 11 M 17 12 V 20 M 13 16 H 21"
+        case "trash":
+            return "M 3 6 H 21 M 8 6 V 4 A 1 1 0 0 1 9 3 H 15 A 1 1 0 0 1 16 4 V 6 M 19 6 V 20 A 2 2 0 0 1 17 22 H 7 A 2 2 0 0 1 5 20 V 6 M 10 11 V 17 M 14 11 V 17"
         case "more-vertical":
             return "M 12 14 A 2 2 0 1 1 12 10 A 2 2 0 0 1 12 14 Z M 12 7 A 2 2 0 1 1 12 3 A 2 2 0 0 1 12 7 Z M 12 21 A 2 2 0 1 1 12 17 A 2 2 0 0 1 12 21 Z"
         case "x":
