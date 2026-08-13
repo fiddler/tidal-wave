@@ -238,6 +238,14 @@ ApplicationWindow {
         }
     }
 
+    // The TrackSelection of whichever page is showing, or null if that page has
+    // no track list. Cmd+A and Escape both act through this.
+    function currentSelection() {
+        var l = getLoader(currentPage)
+        if (l && l.item && l.item.pageSelection) return l.item.pageSelection
+        return null
+    }
+
     function goBack() {
         navigate(previousPage, previousPageParams)
     }
@@ -305,12 +313,26 @@ ApplicationWindow {
         }
         Shortcut { sequence: "Ctrl+Q"; context: Qt.ApplicationShortcut; enabled: auth.state === 2; onActivated: root.queueOpen = !root.queueOpen }
         Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; enabled: auth.state === 2; onActivated: sideBar.openSettings() }
+        // Select all tracks on the current page. StandardKey maps to Cmd+A on
+        // macOS and Ctrl+A elsewhere. Suppressed while typing so it still
+        // selects the text in a search field.
+        Shortcut {
+            sequences: [StandardKey.SelectAll]
+            context: Qt.ApplicationShortcut
+            enabled: auth.state === 2 && !root.isTypingContext(root.activeFocusItem)
+            onActivated: {
+                var sel = root.currentSelection()
+                if (sel) sel.selectAll()
+            }
+        }
         Shortcut {
             sequence: "Escape"
             context: Qt.ApplicationShortcut
             enabled: auth.state === 2
             onActivated: {
-                if (root.queueOpen) root.queueOpen = false
+                var sel = root.currentSelection()
+                if (sel && sel.hasSelection) sel.clear()
+                else if (root.queueOpen) root.queueOpen = false
                 else if (root.detailPages.indexOf(root.currentPage) !== -1) root.goBack()
             }
         }
@@ -459,6 +481,9 @@ ApplicationWindow {
         id: importDrop
         anchors.fill: parent
         enabled: auth.state === 2
+        // Only external file drops. Internal track drags carry a different key
+        // and therefore pass straight through to the playlist drop targets.
+        keys: ["text/uri-list"]
 
         property bool acceptable: false
 
@@ -537,6 +562,85 @@ ApplicationWindow {
                 color: Theme.textPrimary
                 font.pixelSize: 15
                 font.bold: true
+            }
+        }
+    }
+
+    // ── track drag ghost ───────────────────────────────
+    // One shared ghost for the whole window. TrackRow borrows it while a drag
+    // is in flight; drop targets read `drag.source.payload` and
+    // `drag.source.kind` off it.
+    property alias dragLayer: dragLayer
+
+    Item {
+        id: dragLayer
+        anchors.fill: parent
+        z: 10000
+
+        // True while a track drag is in flight. Drop targets use it to show
+        // themselves before the cursor arrives, rather than only on contact.
+        readonly property bool dragging: ghost.visible
+
+        // Prepared on press so the drag has a target, but not shown yet: the
+        // ghost only becomes visible once the press turns into a real drag,
+        // otherwise a plain click or a double click flashes it.
+        function acquire(tracks, kind) {
+            if (!tracks || tracks.length === 0) return null
+            ghost.payload = tracks
+            ghost.kind    = kind
+            return ghost
+        }
+        function show() { ghost.visible = true }
+        function release() {
+            ghost.visible = false
+            ghost.payload = []
+            ghost.kind    = ""
+        }
+
+        Item {
+            id: ghost
+            visible: false
+            width: 1
+            height: 1
+
+            property var    payload: []
+            property string kind: ""
+
+            // hotSpot 0,0 on a 1x1 item means drop targets are tested against
+            // this item's origin — which beginDrag() pins to the cursor. Any
+            // offset here would make targeting miss by that much.
+            Drag.active: ghost.visible
+            Drag.keys: ["tidalwave/tracks"]
+            Drag.hotSpot.x: 0
+            Drag.hotSpot.y: 0
+
+            Rectangle {
+                x: 12
+                y: 12
+                width: ghostRow.implicitWidth + 26
+                height: 34
+                radius: 17
+                color: Theme.accent
+                opacity: 0.94
+
+            Row {
+                id: ghostRow
+                anchors.centerIn: parent
+                spacing: 8
+                VectorIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "music"; color: "white"
+                    width: 14; height: 14; strokeWidth: 1.8
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: ghost.payload.length === 1 ? "1 track"
+                                                     : ghost.payload.length + " tracks"
+                    color: "white"
+                    font.pixelSize: 13
+                    font.bold: true
+                }
+            }
             }
         }
     }

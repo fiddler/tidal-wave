@@ -27,6 +27,15 @@ Item {
 
     property int    localPlaylistId: 0   // >0 when shown inside a local playlist
 
+    // Selection + drag. `selection` is the page's TrackSelection object and
+    // `rowIndex` this row's position in its list; both must be set for click
+    // selection and dragging to work. Pages that set neither keep the old
+    // behaviour where a single click plays.
+    property var selection: null
+    property int rowIndex: -1
+    readonly property bool selected: (selection && trackData)
+                                     ? selection.isSelected(trackData.id) : false
+
     property bool   isLiked: (trackData && !trackData.localPath) ? bridge.isTrackFavorite(trackData.id) : false
     // Playlist context: set when TrackRow is inside a PlaylistPage
     property string playlistUuid: ""
@@ -63,6 +72,50 @@ Item {
         root.dlError = ""
     }
 
+    // ── drag source ────────────────────────────────────
+    // The dragged item cannot be this row: ListView clips it and recycles the
+    // delegate mid-drag. Instead the window hosts one shared ghost that this
+    // row borrows for the duration of the drag.
+    property Item dragProxy: null
+    property bool didDrag: false          // true once a press became a drag
+
+    // The proxy is prepared on press because MouseArea needs a drag.target
+    // before the threshold is crossed. It stays invisible until the drag
+    // actually starts — see onDragActiveChanged below.
+    function beginDrag(mouse) {
+        var layer = Window.window.dragLayer
+        if (!layer || !root.selection) return
+        var payload = root.selection.selectedTracks()
+        if (payload.length === 0) return
+        root.dragProxy = layer.acquire(payload, root.isLocalTrack ? "local" : "tidal")
+        if (!root.dragProxy) return
+        // Pin the proxy origin to the cursor: that origin is the point drop
+        // targets are hit-tested against.
+        var p = mapToItem(layer, mouse.x, mouse.y)
+        root.dragProxy.x = p.x
+        root.dragProxy.y = p.y
+    }
+
+    function endDrag() {
+        root.dragProxy = null
+        if (Window.window.dragLayer) Window.window.dragLayer.release()
+    }
+
+    readonly property bool dragActive: hov.drag.active
+    onDragActiveChanged: {
+        var layer = Window.window.dragLayer
+        if (!layer) return
+        if (root.dragActive) {
+            root.didDrag = true
+            layer.show()
+            DragState.begin(root.selection ? root.selection.selectedTracks() : [],
+                            root.isLocalTrack ? "local" : "tidal")
+        } else {
+            layer.release()
+            DragState.end()
+        }
+    }
+
     signal playRequested()
     signal menuRequested(real x, real y)
     signal removeFromPlaylistRequested(int itemIndex)
@@ -82,7 +135,8 @@ Item {
         anchors.fill: parent
         anchors.margins: 2
         radius: 6
-        color: isPlaying ? Qt.rgba(0, 0.698, 0.973, 0.08)
+        color: root.selected ? Qt.rgba(1, 1, 1, 0.13)
+               : isPlaying ? Qt.rgba(0, 0.698, 0.973, 0.08)
                : hov.hovered ? Theme.surfaceHov : "transparent"
         border.width: root.activeFocus ? 2 : 0
         border.color: Theme.accent
@@ -95,12 +149,38 @@ Item {
             cursorShape: Qt.PointingHandCursor
             readonly property bool hovered: containsMouse
 
+            drag.target: root.selection ? root.dragProxy : null
+            drag.threshold: 8
+
+            // A press that turns into a drag must carry the whole selection,
+            // so the row joins the selection on press rather than on release.
+            onPressed: (mouse) => {
+                root.didDrag = false
+                if (mouse.button !== Qt.LeftButton || !root.selection) return
+                if (!root.selected) root.selection.handleClick(root.rowIndex, mouse.modifiers)
+                root.beginDrag(mouse)
+            }
+
+            onReleased: root.endDrag()
+            onCanceled: root.endDrag()
+
+            // Click selects; double click plays — matching the Tidal client
+            // and the desktop convention.
             onClicked: (mouse) => {
                 if (mouse.button === Qt.RightButton) {
+                    if (root.selection && !root.selected)
+                        root.selection.selectOnly(root.rowIndex)
                     contextMenu.popup()
-                } else {
-                    root.playRequested()
+                    return
                 }
+                if (root.didDrag) return                  // the press became a drag
+                if (root.selection) root.selection.handleClick(root.rowIndex, mouse.modifiers)
+                else root.playRequested()
+            }
+
+            onDoubleClicked: (mouse) => {
+                if (mouse.button === Qt.LeftButton)
+                    root.playRequested()
             }
         }
 
@@ -327,8 +407,18 @@ Item {
             background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: {
                 if (!root.trackData) return
-                if (root.isLocalTrack) localPlaylistPicker.openFor(root.trackData.localId)
-                else                   playlistPicker.openFor(root.trackData.id)
+                // Acting on a multi-selection adds everything selected.
+                var picked = (root.selection && root.selected && root.selection.count > 1)
+                             ? root.selection.selectedTracks() : [root.trackData]
+                if (root.isLocalTrack) {
+                    var localIds = []
+                    for (var i = 0; i < picked.length; i++) localIds.push(picked[i].localId)
+                    localPlaylistPicker.openFor(localIds)
+                } else {
+                    var ids = []
+                    for (var j = 0; j < picked.length; j++) ids.push(picked[j].id)
+                    playlistPicker.openFor(ids)
+                }
             }
         }
         MenuItem {
@@ -424,10 +514,10 @@ Item {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
-        property var pendingTrackId: 0
+        property var pendingTrackIds: []
 
-        function openFor(trackId) {
-            pendingTrackId = trackId
+        function openFor(trackIds) {
+            pendingTrackIds = trackIds
             plPickerModel.clear()
             open()
             bridge.fetchUserPlaylists(function(pls, err) {
@@ -480,7 +570,7 @@ Item {
                         HoverHandler { id: plHov2 }
                         TapHandler {
                             onTapped: {
-                                bridge.addTracksToPlaylist(model.uuid, playlistPicker.pendingTrackId, function(ok) {})
+                                bridge.addTracksToPlaylist(model.uuid, playlistPicker.pendingTrackIds, function(ok) {})
                                 playlistPicker.close()
                             }
                         }
@@ -521,10 +611,10 @@ Item {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
-        property var pendingLocalId: 0
+        property var pendingLocalIds: []
 
-        function openFor(localId) {
-            pendingLocalId = localId
+        function openFor(localIds) {
+            pendingLocalIds = localIds
             reload()
             open()
         }
@@ -584,7 +674,7 @@ Item {
                         HoverHandler { id: localPlHov }
                         TapHandler {
                             onTapped: {
-                                library.addToPlaylist(model.id, [localPlaylistPicker.pendingLocalId])
+                                library.addToPlaylist(model.id, localPlaylistPicker.pendingLocalIds)
                                 localPlaylistPicker.close()
                             }
                         }

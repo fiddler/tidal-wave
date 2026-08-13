@@ -10,6 +10,13 @@ import TidalWave
 // to a real Tidal playlist. Both kinds of track mix freely in the play queue.
 Rectangle {
     id: root
+
+    // Exposed so Cmd+A and Escape can reach it from the window.
+
+    property var pageSelection: trackSel
+
+    // Click-selection state for the track list below.
+    TrackSelection { id: trackSel; tracks: root.tracks }
     color: Theme.bg
 
     property var tracks: []
@@ -129,6 +136,8 @@ Rectangle {
         }
 
         delegate: TrackRow {
+            selection: trackSel
+            rowIndex:  index
             width: tracksList.width - 32
             x: 16
             trackNum:    index + 1

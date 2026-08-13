@@ -6,6 +6,13 @@ import TidalWave
 
 Rectangle {
     id: root
+
+    // Exposed so Cmd+A and Escape can reach it from the window.
+
+    property var pageSelection: trackSel
+
+    // Click-selection state for the track list below.
+    TrackSelection { id: trackSel; tracks: root.tracks }
     color: Theme.bg
     focus: true
 
@@ -129,6 +136,8 @@ Rectangle {
                     Repeater {
                         model: root.activeTab === 0 ? Math.min(root.tracks.length, 5) : root.tracks.length
                         TrackRow {
+                            selection: trackSel
+                            rowIndex:  index
                             required property int index
                             Layout.fillWidth: true
                             Layout.leftMargin: 16

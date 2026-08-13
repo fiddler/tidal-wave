@@ -6,6 +6,13 @@ import TidalWave
 
 Rectangle {
     id: root
+
+    // Exposed so Cmd+A and Escape can reach it from the window.
+
+    property var pageSelection: trackSel
+
+    // Click-selection state for the track list below.
+    TrackSelection { id: trackSel; tracks: root.showAllTracks ? root.topTracks : root.topTracks.slice(0, 5) }
     color: Theme.bg
 
     property var artistId: 0
@@ -184,6 +191,8 @@ Rectangle {
             Repeater {
                 model: root.showAllTracks ? root.topTracks : root.topTracks.slice(0, 5)
                 TrackRow {
+                    selection: trackSel
+                    rowIndex:  index
                     Layout.fillWidth: true
                     Layout.leftMargin: 16
                     Layout.rightMargin: 16

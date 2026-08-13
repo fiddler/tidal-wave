@@ -88,18 +88,44 @@ Rectangle {
 
         Item { height: 8 }
 
-        ListView {
-            id: playlistList
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
+
+            DragScrollEdge {
+                view: playlistList
+                direction: -1
+                anchors { left: parent.left; right: parent.right; top: parent.top }
+                onDroppedAt: (index, source) => playlistList.addTracksAt(index, source)
+            }
+            DragScrollEdge {
+                view: playlistList
+                direction: 1
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                onDroppedAt: (index, source) => playlistList.addTracksAt(index, source)
+            }
+
+        ListView {
+            id: playlistList
+            anchors.fill: parent
             clip: true
             bottomMargin: 8
             model: ListModel { id: playlistModel }
+
+            // Shared by the row drop targets and the edge sensors above.
+            function addTracksAt(index, source) {
+                if (index < 0 || index >= playlistModel.count) return
+                if (!source || source.kind !== "tidal") return
+                var ids = []
+                for (var i = 0; i < source.payload.length; i++) ids.push(source.payload[i].id)
+                bridge.addTracksToPlaylist(playlistModel.get(index).uuid, ids, function(ok) {})
+            }
 
             delegate: Item {
                 id: plDelegate
                 width: ListView.view.width
                 height: 36
+                readonly property int rowIndex: index
 
                 function activate() {
                     root.navigate("playlist", { playlistUuid: model.uuid, playlistTitle: model.title, coverUrl: model.coverUrl || "", playlistType: model.type || "" })
@@ -109,13 +135,30 @@ Rectangle {
                 Keys.onReturnPressed: activate()
                 Keys.onSpacePressed:  activate()
 
+                // Tidal playlists take Tidal tracks only. A local file has no
+                // Tidal id, so the API could not accept it.
+                DropArea {
+                    id: plDrop
+                    anchors.fill: parent
+                    keys: ["tidalwave/tracks"]
+                    property bool willAccept: containsDrag && drag.source
+                                              && drag.source.kind === "tidal"
+                    onEntered: (d) => { if (!d.source || d.source.kind !== "tidal") d.accepted = false }
+                    onDropped: (d) => {
+                        if (!d.source || d.source.kind !== "tidal") { d.accepted = false; return }
+                        playlistList.addTracksAt(plDelegate.rowIndex, d.source)
+                        d.accept()
+                    }
+                }
+
                 Rectangle {
                     id: plRect
                     anchors.fill: parent
                     anchors.margins: 2
                     radius: 6
-                    color: plHov.hovered ? Theme.surfaceHov : "transparent"
-                    border.width: plDelegate.activeFocus ? 2 : 0
+                    color: plDrop.willAccept ? Qt.rgba(0, 0.698, 0.973, 0.28)
+                           : plHov.hovered ? Theme.surfaceHov : "transparent"
+                    border.width: plDrop.willAccept ? 1 : (plDelegate.activeFocus ? 2 : 0)
                     border.color: Theme.accent
                     HoverHandler { id: plHov }
                     TapHandler {
@@ -151,6 +194,7 @@ Rectangle {
                 }
             }
         }
+        }
 
         // ─── Local playlists ───────────────────────────
         // Kept in their own group: these live only in this app and hold files
@@ -176,14 +220,39 @@ Rectangle {
 
         Item { height: 8; visible: localPlaylistList.count > 0 }
 
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(localPlaylistList.contentHeight, 160)
+            Layout.bottomMargin: 8
+            visible: localPlaylistList.count > 0
+
+            DragScrollEdge {
+                view: localPlaylistList
+                direction: -1
+                anchors { left: parent.left; right: parent.right; top: parent.top }
+                onDroppedAt: (index, source) => localPlaylistList.addTracksAt(index, source)
+            }
+            DragScrollEdge {
+                view: localPlaylistList
+                direction: 1
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                onDroppedAt: (index, source) => localPlaylistList.addTracksAt(index, source)
+            }
+
         ListView {
             id: localPlaylistList
-            Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(contentHeight, 160)
-            Layout.bottomMargin: 8
-            visible: count > 0
+            anchors.fill: parent
             clip: true
             model: ListModel { id: localPlaylistModel }
+
+            // Shared by the row drop targets and the edge sensors above.
+            function addTracksAt(index, source) {
+                if (index < 0 || index >= localPlaylistModel.count) return
+                if (!source || source.kind !== "local") return
+                var ids = []
+                for (var i = 0; i < source.payload.length; i++) ids.push(source.payload[i].localId)
+                library.addToPlaylist(localPlaylistModel.get(index).id, ids)
+            }
 
             function reload() {
                 localPlaylistModel.clear()
@@ -200,6 +269,7 @@ Rectangle {
                 id: lplDelegate
                 width: ListView.view.width
                 height: 36
+                readonly property int rowIndex: index
 
                 function activate() {
                     root.navigate("localplaylist", {
@@ -212,12 +282,29 @@ Rectangle {
                 Keys.onReturnPressed: activate()
                 Keys.onSpacePressed:  activate()
 
+                // Local playlists hold local files only: playlist_items has a
+                // foreign key into the local tracks table.
+                DropArea {
+                    id: lplDrop
+                    anchors.fill: parent
+                    keys: ["tidalwave/tracks"]
+                    property bool willAccept: containsDrag && drag.source
+                                              && drag.source.kind === "local"
+                    onEntered: (d) => { if (!d.source || d.source.kind !== "local") d.accepted = false }
+                    onDropped: (d) => {
+                        if (!d.source || d.source.kind !== "local") { d.accepted = false; return }
+                        localPlaylistList.addTracksAt(lplDelegate.rowIndex, d.source)
+                        d.accept()
+                    }
+                }
+
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: 2
                     radius: 6
-                    color: lplHov.hovered ? Theme.surfaceHov : "transparent"
-                    border.width: lplDelegate.activeFocus ? 2 : 0
+                    color: lplDrop.willAccept ? Qt.rgba(0, 0.698, 0.973, 0.28)
+                           : lplHov.hovered ? Theme.surfaceHov : "transparent"
+                    border.width: lplDrop.willAccept ? 1 : (lplDelegate.activeFocus ? 2 : 0)
                     border.color: Theme.accent
                     HoverHandler { id: lplHov }
                     TapHandler { onTapped: lplDelegate.activate() }
@@ -246,6 +333,7 @@ Rectangle {
                     }
                 }
             }
+        }
         }
 
     }

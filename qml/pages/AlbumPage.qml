@@ -6,6 +6,13 @@ import TidalWave
 
 Rectangle {
     id: root
+
+    // Exposed so Cmd+A and Escape can reach it from the window.
+
+    property var pageSelection: trackSel
+
+    // Click-selection state for the track list below.
+    TrackSelection { id: trackSel; tracks: root.tracks }
     color: Theme.bg
 
     property var albumId: 0
@@ -204,6 +211,8 @@ Rectangle {
         }
 
         delegate: TrackRow {
+            selection: trackSel
+            rowIndex:  index
             width: tracksList.width - 32
             x: 16
             trackNum:    index + 1

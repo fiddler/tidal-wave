@@ -364,14 +364,19 @@ void TidalClient::createPlaylist(const QString &title,
         });
 }
 
-void TidalClient::addTrackToPlaylist(const QString &uuid, qint64 trackId,
+// Tidal's endpoint takes a comma-separated trackIds list, so adding many
+// tracks costs the same single request as adding one.
+void TidalClient::addTracksToPlaylist(const QString &uuid, const QList<qint64> &trackIds,
     std::function<void(bool)> cb)
 {
+    if (trackIds.isEmpty()) { cb(false); return; }
     m_api->getEtag(QStringLiteral("playlists/%1").arg(uuid),
-        [this, uuid, trackId, cb](QString etag, QString err) {
+        [this, uuid, trackIds, cb](QString etag, QString err) {
             if (!err.isEmpty()) { cb(false); return; }
+            QStringList ids;
+            for (qint64 id : trackIds) ids << QString::number(id);
             QUrlQuery form;
-            form.addQueryItem("trackIds",           QString::number(trackId));
+            form.addQueryItem("trackIds",           ids.join(QLatin1Char(',')));
             form.addQueryItem("onArtifactNotFound", "FAIL");
             form.addQueryItem("onDuplicateFound",   "SKIP");
             m_api->postApiFormEtag(QStringLiteral("playlists/%1/items").arg(uuid), form, etag,

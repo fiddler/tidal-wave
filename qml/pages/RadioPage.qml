@@ -6,6 +6,13 @@ import TidalWave
 
 Rectangle {
     id: root
+
+    // Exposed so Cmd+A and Escape can reach it from the window.
+
+    property var pageSelection: trackSel
+
+    // Click-selection state for the track list below.
+    TrackSelection { id: trackSel; tracks: root.tracks }
     color: Theme.bg
 
     property var    radioTitle: ""
@@ -91,6 +98,8 @@ Rectangle {
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
             delegate: TrackRow {
+                selection: trackSel
+                rowIndex:  index
                 required property var modelData
                 required property int index
                 width: trackList.width

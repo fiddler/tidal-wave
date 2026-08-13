@@ -104,6 +104,7 @@ qt_add_qml_module(tidal-wave
         qml/components/PlayerBar.qml
         qml/components/SideBar.qml
         qml/components/TrackRow.qml
+        qml/components/TrackSelection.qml
         qml/components/MediaCard.qml
         qml/components/BackButton.qml
         qml/components/PillButton.qml

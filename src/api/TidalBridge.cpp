@@ -362,8 +362,10 @@ void TidalBridge::createPlaylist(const QString &title, QJSValue cb) {
     });
 }
 
-void TidalBridge::addTracksToPlaylist(const QString &uuid, qlonglong trackId, QJSValue cb) {
-    m_client->addTrackToPlaylist(uuid, trackId, [this, cb](bool success) mutable {
+void TidalBridge::addTracksToPlaylist(const QString &uuid, const QVariantList &trackIds, QJSValue cb) {
+    QList<qint64> ids;
+    for (const QVariant &v : trackIds) ids << v.toLongLong();
+    m_client->addTracksToPlaylist(uuid, ids, [this, cb](bool success) mutable {
         call(cb, { success });
     });
 }
