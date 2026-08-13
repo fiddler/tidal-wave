@@ -12,6 +12,7 @@ class QNetworkReply;
 class CastSession;
 class DashFetcher;
 class DashStream;
+class OfflineManager;
 
 class Player : public QObject {
     Q_OBJECT
@@ -67,6 +68,10 @@ public:
     // For MPRIS (internal use)
     Track currentTrack() const { return m_currentTrack; }
     qlonglong currentTrackId() const { return m_currentTrack.id; }
+
+    // Optional offline cache: when set, tracks with a cached file play from
+    // disk instead of streaming. Wired up by Application.
+    void setOfflineStore(OfflineManager *offline) { m_offline = offline; }
 
     // ── Session persistence ─────────────────────────────────────────────
     // The queue, the current track and the playback offset survive a restart.
@@ -149,6 +154,7 @@ private:
     void cancelPreload();
 
     TidalClient         *m_client;
+    OfflineManager      *m_offline = nullptr;
     // Volume and mute live on the backend now; QAudioOutput is gone with
     // QMediaPlayer. m_pendingVolume/m_pendingMuted still hold the values until
     // initAudio() runs, exactly as before.

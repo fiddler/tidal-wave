@@ -10,6 +10,11 @@ Item {
     property string text: ""
     property string glyph: ""
     property bool   accent: true
+    // Override for the icon color (e.g. a green check for a completed state).
+    property color  glyphColor: accent ? "white" : Theme.textPrimary
+    // Renders the glyph inside a filled circle of glyphColor (the Spotify-style
+    // "downloaded" badge). The glyph itself flips to the background color.
+    property bool   glyphBadge: false
 
     signal clicked()
 
@@ -27,6 +32,18 @@ Item {
         Row {
             anchors.centerIn: parent
             spacing: 8
+            Rectangle {
+                visible: root.glyphBadge && root.glyph !== ""
+                width: 16; height: 16; radius: 8
+                color: root.glyphColor
+                anchors.verticalCenter: parent.verticalCenter
+                VectorIcon {
+                    anchors.centerIn: parent
+                    name: "arrow-down-filled"
+                    color: Theme.surfaceHigh
+                    width: 10; height: 10
+                }
+            }
             VectorIcon {
                 id: glyphIcon
                 name: root.glyph === "▶" ? "play"
@@ -35,12 +52,12 @@ Item {
                     : root.glyph === "♡" ? "heart"
                     : root.glyph === "✎" ? "edit"
                     : root.glyph
-                color: root.accent ? "white" : Theme.textPrimary
+                color: root.glyphColor
                 width: 14
                 height: 14
                 strokeWidth: 1.8
                 anchors.verticalCenter: parent.verticalCenter
-                visible: root.glyph !== ""
+                visible: root.glyph !== "" && !root.glyphBadge
             }
             Text { text: root.text;  color: root.accent ? "white" : Theme.textPrimary; font.pixelSize: 14; font.bold: root.accent; anchors.verticalCenter: parent.verticalCenter }
         }

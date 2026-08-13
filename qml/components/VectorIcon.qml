@@ -17,6 +17,11 @@ Item {
         anchors.centerIn: parent
         antialiasing: true
         smooth: true
+        // The default renderer rasterizes the 24-unit path and then scales it,
+        // which smears small icons (a 9px glyph is ~3px of real geometry) into
+        // grey mush. The curve renderer draws resolution-independent on the
+        // GPU, so tiny icons stay crisp.
+        preferredRendererType: Shape.CurveRenderer
 
         transform: Scale {
             origin.x: 12
@@ -30,8 +35,8 @@ Item {
             // Filled glyphs render as solid shapes; an extra stroke at small
             // sizes just bridges adjacent bars/edges into an unrecognizable
             // blob (e.g. the pause bars merging into a single square).
-            strokeWidth: (root.name === "play" || root.name === "pause" || root.name === "more-vertical" || root.name === "more" || root.name === "heart-filled") ? 0 : root.strokeWidth
-            fillColor: (root.name === "play" || root.name === "pause" || root.name === "more-vertical" || root.name === "more" || root.name === "heart-filled") ? root.color : "transparent"
+            strokeWidth: (root.name === "play" || root.name === "pause" || root.name === "more-vertical" || root.name === "more" || root.name === "heart-filled" || root.name === "arrow-down-filled") ? 0 : root.strokeWidth
+            fillColor: (root.name === "play" || root.name === "pause" || root.name === "more-vertical" || root.name === "more" || root.name === "heart-filled" || root.name === "arrow-down-filled") ? root.color : "transparent"
             capStyle: ShapePath.RoundCap
             joinStyle: ShapePath.RoundJoin
             PathSvg { path: root._pathFor(root.name) }
@@ -99,6 +104,11 @@ Item {
             return "M 11 4 H 4 A 2 2 0 0 0 2 6 V 20 A 2 2 0 0 0 4 22 H 18 A 2 2 0 0 0 20 20 V 13 M 18.5 2.5 A 2.121 2.121 0 1 1 21.5 5.5 L 12 15 L 8 16 L 9 12 L 18.5 2.5 Z"
         case "download":
             return "M 12 3 V 15 M 7 10 L 12 15 L 17 10 M 4 20 H 20"
+        case "arrow-down":
+            return "M 12 4 V 20 M 5 13 L 12 20 L 19 13"
+        case "arrow-down-filled":
+            // Fat solid arrow — the stroked one smears into noise below ~10px.
+            return "M 9 2 H 15 V 10 H 21 L 12 22 L 3 10 H 9 Z"
         case "check":
             return "M 5 12 L 10 17 L 19 7"
         case "cast":

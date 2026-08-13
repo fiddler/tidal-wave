@@ -6,6 +6,7 @@
 #include <QSettings>
 #include <QDir>
 #include "cast/CastSession.h"
+#include "library/OfflineManager.h"
 #include "DashFetcher.h"
 #include "MpvAudio.h"
 #include "DashStream.h"
@@ -503,6 +504,20 @@ void Player::loadAndPlay(int index, qint64 startMs) {
         return;
     }
 
+    // Offline cache hit — play the pinned copy from disk, no network at all.
+    if (m_offline) {
+        const QString cached = m_offline->localPathFor(m_currentTrack.id);
+        if (!cached.isEmpty()) {
+            cancelPreload();
+            m_streamedQuality = m_offline->tierFor(m_currentTrack.id);
+            emit currentTrackChanged();
+            qInfo() << "[play] track" << m_currentTrack.id << "from offline cache";
+            m_player->setSource(QUrl::fromLocalFile(cached));
+            m_player->play();
+            return;
+        }
+    }
+
     // Use preloaded file if it's ready for this exact index
     if (m_preloadIndex == index && m_preloadReady && m_preloadTempFile) {
         m_mpdTempFile     = m_preloadTempFile;
@@ -658,6 +673,10 @@ void Player::preloadNext() {
 
     // Local files open instantly and have no manifest — nothing to preload.
     if (!m_queue[next].value("localPath").toString().isEmpty()) return;
+
+    // Same for offline-cached tracks: they open straight from disk.
+    if (m_offline && !m_offline->localPathFor(m_queue[next].value("id").toLongLong()).isEmpty())
+        return;
 
     m_preloadIndex = next;
 

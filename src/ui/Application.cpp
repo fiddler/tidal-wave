@@ -196,6 +196,8 @@ int Application::run(int argc, char **argv) {
     });
     m_downloader = new Downloader(m_client, this);
     m_library    = new LocalLibrary(this);
+    m_offline    = new OfflineManager(m_client, this);
+    m_player->setOfflineStore(m_offline);
 #ifdef Q_OS_LINUX
     // Chromecast output relies on Avahi (Linux mDNS); build/enable only there.
     m_cast = new CastManager(m_client, m_player, this);
@@ -254,6 +256,7 @@ int Application::run(int argc, char **argv) {
     ctx->setContextProperty(QStringLiteral("player"), m_player);
     ctx->setContextProperty(QStringLiteral("downloader"), m_downloader);
     ctx->setContextProperty(QStringLiteral("library"), m_library);
+    ctx->setContextProperty(QStringLiteral("offline"), m_offline);
     // `cast` is Linux-only; register it as null elsewhere (m_cast is an
     // incomplete type off-Linux since CastManager.h isn't included there).
     QObject *castObj = nullptr;

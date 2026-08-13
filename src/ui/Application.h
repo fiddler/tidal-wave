@@ -7,6 +7,7 @@
 #include "player/Player.h"
 #include "player/Downloader.h"
 #include "library/LocalLibrary.h"
+#include "library/OfflineManager.h"
 #include "mpris/MprisPlayer.h"
 #include "ui/ImageProvider.h"
 #include <QSystemTrayIcon>
@@ -58,6 +59,7 @@ private:
     Player      *m_player = nullptr;
     Downloader  *m_downloader = nullptr;
     LocalLibrary*m_library = nullptr;
+    OfflineManager *m_offline = nullptr;
     CastManager *m_cast   = nullptr;
     MprisManager*m_mpris  = nullptr;
     MacNowPlaying *m_nowPlaying = nullptr;   // macOS media keys / Now Playing

@@ -52,6 +52,7 @@ set(SOURCES
     src/player/DashStream.cpp
     src/player/Downloader.cpp
     src/library/LocalLibrary.cpp
+    src/library/OfflineManager.cpp
     src/mpris/MprisPlayer.cpp
     src/ui/Application.cpp
     src/ui/ImageProvider.cpp
@@ -69,6 +70,7 @@ set(HEADERS
     src/player/DashStream.h
     src/player/Downloader.h
     src/library/LocalLibrary.h
+    src/library/OfflineManager.h
     src/mpris/MprisPlayer.h
     src/ui/Application.h
     src/ui/ImageProvider.h

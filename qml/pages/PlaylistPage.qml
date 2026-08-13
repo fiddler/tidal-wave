@@ -31,7 +31,24 @@ Rectangle {
         player.playTracks(list, i)
     }
 
-    onPlaylistUuidChanged: if (playlistUuid.length > 0) loadPlaylist()
+    // Offline pin state for this playlist: {state: "none|syncing|offline|error",
+    // done, total}. The pill button below renders it; refreshed on every
+    // OfflineManager signal for this uuid.
+    property var offlineStatus: ({ state: "none", done: 0, total: 0 })
+    property var offlineEstimate: ({ count: 0, sizeStr: "", timeStr: "" })
+
+    function refreshOffline() {
+        if (playlistUuid.length > 0) offlineStatus = offline.status(playlistUuid)
+    }
+
+    Connections {
+        target: offline
+        function onPlaylistChanged(uuid) {
+            if (uuid === root.playlistUuid) root.refreshOffline()
+        }
+    }
+
+    onPlaylistUuidChanged: if (playlistUuid.length > 0) { loadPlaylist(); refreshOffline() }
 
     // The list as it will look once the move lands. Mirrors the ordering the
     // server is asked for, so the optimistic view matches the result.
@@ -88,7 +105,10 @@ Rectangle {
         loading = true
         bridge.fetchPlaylistTracks(playlistUuid, function(t, err) {
             loading = false
-            if (!err) tracks = t
+            if (!err) { tracks = t; return }
+            // No network — a pinned playlist still renders from its stored copy.
+            var cached = offline.cachedTracks(playlistUuid)
+            if (cached.length > 0) tracks = cached
         })
     }
 
@@ -251,6 +271,38 @@ Rectangle {
                                 editPlaylistPopup.open()
                             }
                         }
+
+                        // Offline pin — the button doubles as the state
+                        // indicator: idle / "done / total" while syncing / a
+                        // green "Downloaded" check when the copy is complete.
+                        PillButton {
+                            width: 150
+                            text: {
+                                if (root.offlineStatus.state === "syncing")
+                                    return root.offlineStatus.done + " / " + root.offlineStatus.total
+                                if (root.offlineStatus.state === "offline") return "Downloaded"
+                                if (root.offlineStatus.state === "error")   return "Retry offline"
+                                return "Make offline"
+                            }
+                            glyph: root.offlineStatus.state === "offline" ? "arrow-down" : "download"
+                            glyphBadge: root.offlineStatus.state === "offline"
+                            glyphColor: root.offlineStatus.state === "offline" ? Theme.green
+                                      : root.offlineStatus.state === "error"   ? Theme.red
+                                      : Theme.textPrimary
+                            accent: false
+                            onClicked: {
+                                if (root.tracks.length === 0) return
+                                if (root.offlineStatus.state === "none") {
+                                    root.offlineEstimate = offline.estimate(root.tracks)
+                                    offlinePinPopup.open()
+                                } else if (root.offlineStatus.state === "error") {
+                                    offline.pin(root.playlistUuid, root.playlistTitle,
+                                                root.coverUrl, root.tracks)
+                                } else {
+                                    offlineRemovePopup.open()
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -373,6 +425,103 @@ Rectangle {
                         if (newTitle.length > 0) root.playlistTitle = newTitle
                         root.playlistDescription = editDescField.text.trim()
                         editPlaylistPopup.close()
+                    }
+                }
+            }
+        }
+    }
+
+    // Confirm before pinning: the size and time estimates are the warning —
+    // a long playlist announces itself as hours of background syncing.
+    Popup {
+        id: offlinePinPopup
+        anchors.centerIn: Overlay.overlay
+        width: 420
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 20
+        background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 12 }
+
+        Column {
+            width: parent.width
+            spacing: 14
+
+            Text { text: "Make this playlist offline?"; color: Theme.textPrimary; font.pixelSize: 16; font.bold: true }
+
+            Rectangle { width: parent.width; height: 1; color: Theme.border }
+
+            Text {
+                width: parent.width
+                wrapMode: Text.WordWrap
+                color: Theme.textSec
+                font.pixelSize: 13
+                lineHeight: 1.3
+                text: root.offlineEstimate.count + " tracks, about "
+                      + root.offlineEstimate.sizeStr + " of storage.\n\n"
+                      + "Tracks download at listening speed to go easy on Tidal, so the "
+                      + "full offline copy is ready in about " + root.offlineEstimate.timeStr
+                      + ". The sync runs in the background while the app is open and "
+                      + "resumes on the next start."
+            }
+
+            Row {
+                spacing: 10; anchors.right: parent.right
+                PillButton {
+                    text: "Cancel"; accent: false
+                    onClicked: offlinePinPopup.close()
+                }
+                PillButton {
+                    text: "Make offline"; accent: true; width: 150
+                    onClicked: {
+                        offline.pin(root.playlistUuid, root.playlistTitle,
+                                    root.coverUrl, root.tracks)
+                        offlinePinPopup.close()
+                    }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: offlineRemovePopup
+        anchors.centerIn: Overlay.overlay
+        width: 400
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 20
+        background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 12 }
+
+        Column {
+            width: parent.width
+            spacing: 14
+
+            Text { text: "Remove offline copy?"; color: Theme.textPrimary; font.pixelSize: 16; font.bold: true }
+
+            Rectangle { width: parent.width; height: 1; color: Theme.border }
+
+            Text {
+                width: parent.width
+                wrapMode: Text.WordWrap
+                color: Theme.textSec
+                font.pixelSize: 13
+                text: root.offlineStatus.state === "syncing"
+                      ? "The sync stops, and the tracks downloaded so far are removed from this computer."
+                      : "The downloaded tracks are removed from this computer. The playlist itself stays on Tidal."
+            }
+
+            Row {
+                spacing: 10; anchors.right: parent.right
+                PillButton {
+                    text: "Cancel"; accent: false
+                    onClicked: offlineRemovePopup.close()
+                }
+                PillButton {
+                    text: "Remove"; accent: true
+                    onClicked: {
+                        offline.unpin(root.playlistUuid)
+                        offlineRemovePopup.close()
                     }
                 }
             }

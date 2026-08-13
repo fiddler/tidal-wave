@@ -127,6 +127,18 @@ Rectangle {
                 height: 36
                 readonly property int rowIndex: index
 
+                // Offline pin state of this playlist, rendered as the small
+                // icon on the right: green check = downloaded, dim arrow =
+                // still syncing.
+                property string offState: offline.status(model.uuid).state
+                Connections {
+                    target: offline
+                    function onPlaylistChanged(uuid) {
+                        if (uuid === model.uuid)
+                            plDelegate.offState = offline.status(model.uuid).state
+                    }
+                }
+
                 function activate() {
                     root.navigate("playlist", { playlistUuid: model.uuid, playlistTitle: model.title, coverUrl: model.coverUrl || "", playlistType: model.type || "" })
                 }
@@ -173,7 +185,38 @@ Rectangle {
                         color: Theme.textSec
                         font.pixelSize: 13
                         elide: Text.ElideRight
-                        width: parent.width - 32
+                        width: parent.width - (plOfflineIcon.visible ? 48 : 32)
+                    }
+                    // Downloaded = the Spotify-style green circle with a down
+                    // arrow; syncing = a dim bare arrow; failed = a red one.
+                    Item {
+                        id: plOfflineIcon
+                        visible: plDelegate.offState !== "none"
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 15; height: 15
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: width / 2
+                            visible: plDelegate.offState === "offline"
+                            color: Theme.green
+                            VectorIcon {
+                                anchors.centerIn: parent
+                                width: 9; height: 9
+                                name: "arrow-down-filled"
+                                color: Theme.bg
+                            }
+                        }
+                        VectorIcon {
+                            anchors.centerIn: parent
+                            visible: plDelegate.offState !== "offline"
+                            width: 12; height: 12
+                            strokeWidth: 2
+                            name: "download"
+                            color: plDelegate.offState === "error" ? Theme.red : Theme.textDim
+                        }
                     }
                     ToolTip {
                         id: plToolTip
