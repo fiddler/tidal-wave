@@ -24,6 +24,11 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS
 
 qt_standard_project_setup()
 
+# The macOS Now Playing / media-key bridge is Objective-C++.
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
+
 # Chromecast support (Linux only) needs Avahi for mDNS discovery.
 if(UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
@@ -76,6 +81,14 @@ if(UNIX AND NOT APPLE)
         src/cast/CastMediaPrep.h
         src/cast/CastManager.h
     )
+endif()
+
+# Now Playing integration (macOS only — MediaPlayer.framework).
+if(APPLE)
+    list(APPEND SOURCES src/macos/MacNowPlaying.mm)
+    list(APPEND HEADERS src/macos/MacNowPlaying.h)
+    set_source_files_properties(src/macos/MacNowPlaying.mm PROPERTIES
+        COMPILE_OPTIONS "-fobjc-arc")
 endif()
 
 qt_add_executable(tidal-wave
@@ -141,7 +154,7 @@ qt_add_qml_module(tidal-wave
         assets/icon.png
 )
 
-target_include_directories(tidal-wave PRIVATE src src/api src/player src/mpris src/ui src/cast src/library)
+target_include_directories(tidal-wave PRIVATE src src/api src/player src/mpris src/ui src/cast src/library src/macos)
 
 target_link_libraries(tidal-wave PRIVATE
     Qt6::Core
@@ -162,6 +175,15 @@ target_link_libraries(tidal-wave PRIVATE
 # Avahi for Chromecast discovery (Linux only).
 if(UNIX AND NOT APPLE)
     target_link_libraries(tidal-wave PRIVATE PkgConfig::AVAHI)
+endif()
+
+# MediaPlayer.framework supplies MPRemoteCommandCenter (media keys) and
+# MPNowPlayingInfoCenter (Control Centre metadata); AppKit supplies NSImage
+# for the cover art.
+if(APPLE)
+    target_link_libraries(tidal-wave PRIVATE
+        "-framework MediaPlayer"
+        "-framework AppKit")
 endif()
 
 # Bundle icon (macOS). The .icns follows Apple's icon grid — 824x824 of

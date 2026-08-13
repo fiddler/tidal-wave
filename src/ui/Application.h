@@ -13,6 +13,7 @@
 
 class QQmlApplicationEngine;
 class CastManager;
+class MacNowPlaying;
 
 class Application : public QObject {
     Q_OBJECT
@@ -41,6 +42,7 @@ private:
     LocalLibrary*m_library = nullptr;
     CastManager *m_cast   = nullptr;
     MprisManager*m_mpris  = nullptr;
+    MacNowPlaying *m_nowPlaying = nullptr;   // macOS media keys / Now Playing
     QSystemTrayIcon *m_trayIcon = nullptr;
     QQmlApplicationEngine *m_engine = nullptr;
 

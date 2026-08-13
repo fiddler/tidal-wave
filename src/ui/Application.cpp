@@ -2,6 +2,9 @@
 #ifdef Q_OS_LINUX
 #include "cast/CastManager.h"
 #endif
+#ifdef Q_OS_MACOS
+#include "macos/MacNowPlaying.h"
+#endif
 #include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -194,6 +197,12 @@ int Application::run(int argc, char **argv) {
     // MPRIS is a Linux/D-Bus-only desktop-integration protocol. There's no
     // session bus on Windows/macOS, so constructing it there is dead init.
     m_mpris  = new MprisManager(m_player, this);
+#endif
+#ifdef Q_OS_MACOS
+    // macOS has no MPRIS. MediaPlayer.framework gives the same integration:
+    // the keyboard media keys and the Control Centre transport controls come
+    // to this player instead of starting Music.app.
+    m_nowPlaying = new MacNowPlaying(m_player, this);
 #endif
 
     connect(m_auth, &Auth::loginSucceeded, this, [this]() {
