@@ -150,11 +150,11 @@ Item {
         }
     }
 
-    // Track hover over entire section for scrollbar visibility
-    MouseArea {
-        id: sectionHover
-        anchors.fill: parent
-        hoverEnabled: true
-        acceptedButtons: Qt.NoButton
-    }
+    // NOTE: there used to be a full-section hoverEnabled MouseArea here, meant
+    // to drive scrollbar visibility. Nothing ever read it (the scrollbar is
+    // AlwaysOff), but because it sat on top of every card it claimed the hover
+    // and forced the default arrow cursor — so the cards never showed the
+    // pointing hand their own HoverHandlers ask for. Do not reintroduce it: use
+    // a HoverHandler, which cooperates with the handlers underneath instead of
+    // shadowing them.
 }
