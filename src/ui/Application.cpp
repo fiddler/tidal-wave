@@ -20,7 +20,7 @@
 #include <QWindow>
 #include <QMenu>
 #include <QAction>
-// #include <QQuickStyle>
+#include <QQuickStyle>
 
 typedef int (*snd_lib_error_handler_t)(const char *file, int line, const char *function, int err, const char *fmt, ...);
 typedef int (*snd_lib_error_set_handler_t)(snd_lib_error_handler_t handler);
@@ -169,7 +169,9 @@ int Application::run(int argc, char **argv) {
     QFont defaultFont("Inter");
     defaultFont.setFamilies({"Inter", "DejaVu Sans", "sans-serif"});
     QApplication::setFont(defaultFont);
-    // QQuickStyle::setStyle("Basic");
+    // macOS defaults to the native style, which rejects the control
+    // customizations in SideBar.qml. Basic is what Linux uses by default.
+    QQuickStyle::setStyle("Basic");
 
     m_api    = new TidalApi(this);
     m_auth   = new Auth(m_api, this);

@@ -11,6 +11,7 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS
     Gui
     Widgets
     Quick
+    QuickControls2
     Qml
     QmlModels
     Network
@@ -135,6 +136,7 @@ target_link_libraries(tidal-wave PRIVATE
     Qt6::Gui
     Qt6::Widgets
     Qt6::Quick
+    Qt6::QuickControls2
     Qt6::Qml
     Qt6::QmlModels
     Qt6::Network
