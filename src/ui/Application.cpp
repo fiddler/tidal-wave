@@ -187,6 +187,12 @@ int Application::run(int argc, char **argv) {
     m_client = new TidalClient(m_api, this);
     m_bridge = new TidalBridge(m_client, this);
     m_player = new Player(m_client, this);
+    // Save the playback session on any exit path. Closing the window only
+    // hides it to the tray (Main.qml), so a real quit comes from the tray menu
+    // or from the system — aboutToQuit covers all of them.
+    connect(qApp, &QCoreApplication::aboutToQuit, m_player, [this]() {
+        m_player->saveSession();
+    });
     m_downloader = new Downloader(m_client, this);
     m_library    = new LocalLibrary(this);
 #ifdef Q_OS_LINUX

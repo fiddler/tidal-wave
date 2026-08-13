@@ -40,6 +40,12 @@ void Player::initAudio() {
         qint64 dur = m_player->duration();
         if (dur > 10000 && pos > 0 && (dur - pos) <= 10000)
             preloadNext();
+        // Keep the saved offset close to reality without writing on every tick.
+        // A crash or a force quit then loses at most ten seconds of playback.
+        if (qAbs(pos - m_lastSavedPosition) > 10000) {
+            m_lastSavedPosition = pos;
+            saveSession();
+        }
         emit positionChanged(pos);
     });
     connect(m_player, &QMediaPlayer::durationChanged,
@@ -52,8 +58,23 @@ Player::~Player() {
 }
 
 bool   Player::playing()  const { return casting() ? m_castPlaying  : (m_player && m_player->playbackState() == QMediaPlayer::PlayingState); }
-qint64 Player::position() const { return casting() ? m_castPosition : (m_player ? m_player->position() : 0); }
-qint64 Player::duration() const { return casting() ? m_castDuration : (m_player ? m_player->duration() : 0); }
+
+qint64 Player::position() const {
+    if (casting()) return m_castPosition;
+    // A restored session, and a track that is still loading, report the offset
+    // they will start at. Without this the seek bar and the player bar drop to
+    // 0:00 against a track that is plainly not at its start.
+    if (m_pendingSeekMs > 0) return m_pendingSeekMs;
+    return m_player ? m_player->position() : 0;
+}
+
+qint64 Player::duration() const {
+    if (casting()) return m_castDuration;
+    const qint64 d = m_player ? m_player->duration() : 0;
+    if (d > 0) return d;
+    // Before the media loads, the queue entry carries the length in seconds.
+    return currentTrackMap().value(QStringLiteral("duration")).toLongLong() * 1000LL;
+}
 double Player::volume()   const { return m_audioOut ? m_audioOut->volume() : m_pendingVolume; }
 bool   Player::muted()    const { return m_audioOut ? m_audioOut->isMuted() : m_pendingMuted; }
 
@@ -125,7 +146,10 @@ void Player::clearQueue() {
     m_shuffleOrder.clear();
     m_index = -1;
     m_currentTrack = Track{};
+    m_sessionRestored = false;
+    m_pendingSeekMs   = 0;
     setLoading(false);
+    saveSession();          // an empty queue clears the stored session
     emit currentTrackChanged();
     emit queueChanged();
 }
@@ -221,6 +245,13 @@ void Player::playPause() {
     }
 #endif
     if (!m_player) return;
+    // A restored session holds a queue but no stream. Asking QMediaPlayer to
+    // play an empty source would do nothing, so fetch the track and start it
+    // at the offset the last run ended on.
+    if (m_sessionRestored) {
+        loadAndPlay(m_index, m_pendingSeekMs);
+        return;
+    }
     if (m_player->playbackState() == QMediaPlayer::PlayingState)
         m_player->pause();
     else
@@ -254,6 +285,14 @@ void Player::seek(qint64 ms) {
         return;
     }
 #endif
+    // Nothing is loaded yet in a restored session, so there is nothing to seek.
+    // Remember the offset instead: play then starts there. This keeps the seek
+    // bar usable before the first play of a restored track.
+    if (m_sessionRestored) {
+        m_pendingSeekMs = qBound(0LL, ms, duration());
+        emit positionChanged(m_pendingSeekMs);
+        return;
+    }
     if (m_player) m_player->setPosition(ms);
 }
 
@@ -342,8 +381,15 @@ Track Player::trackFromMap(const QVariantMap &m) const {
     return t;
 }
 
-void Player::loadAndPlay(int index) {
+void Player::loadAndPlay(int index, qint64 startMs) {
     if (!m_player || index < 0 || index >= m_queue.count()) return;
+
+    // From here the queue is no longer only restored state: a stream is being
+    // fetched. startMs is applied in onMediaStatusChanged once the media is
+    // ready, and reported by position() until then.
+    m_sessionRestored   = false;
+    m_pendingSeekMs     = qMax(0LL, startMs);
+    m_lastSavedPosition = m_pendingSeekMs;
 
     // Order matters: stop() and clearing the source make QMediaPlayer report
     // LoadedMedia, which onMediaStatusChanged turns back into loading=false.
@@ -393,6 +439,10 @@ void Player::loadAndPlay(int index) {
         QSettings settings;
         settings.setValue(QStringLiteral("user_%1/playback/recentlyPlayed").arg(uid), saveList);
     }
+
+    // Every track change is a new offset of zero, so persist it at once
+    // instead of waiting for the periodic save.
+    saveSession();
 
     // Local library file — there is no manifest to fetch and nothing to
     // preload, so hand the path straight to the player.
@@ -513,6 +563,13 @@ void Player::onMediaStatusChanged(QMediaPlayer::MediaStatus status) {
         setLoading(true); break;
     case QMediaPlayer::BufferedMedia:
     case QMediaPlayer::LoadedMedia:
+        // The media is ready, so a restored offset can finally be applied.
+        // Clear it first: position() must report the player from now on.
+        if (m_pendingSeekMs > 0) {
+            const qint64 target = m_pendingSeekMs;
+            m_pendingSeekMs = 0;
+            m_player->setPosition(target);
+        }
         setLoading(false); break;
     case QMediaPlayer::EndOfMedia:
         setLoading(false);
@@ -698,5 +755,84 @@ void Player::handleUserIdChanged(qint64 uid) {
         }
     }
     emit recentlyPlayedChanged();
+    restoreSession(uid);
+}
+
+// The key that holds the saved session for one user.
+static QString sessionKey(qint64 uid) {
+    return QStringLiteral("user_%1/playback/session").arg(uid);
+}
+
+// A long playlist would write a large blob to QSettings on every save, so the
+// stored queue is bounded. The slice keeps the current track and what follows
+// it, which is what a restart needs.
+static constexpr int kMaxSavedQueue = 500;
+
+void Player::saveSession() const {
+    const qint64 uid = m_client ? m_client->userId() : 0;
+    if (uid <= 0) return;
+
+    QSettings settings;
+    const QString base = sessionKey(uid);
+    if (m_queue.isEmpty() || m_index < 0 || m_index >= m_queue.count()) {
+        settings.remove(base);
+        return;
+    }
+
+    int start = 0;
+    int index = m_index;
+    if (m_queue.count() > kMaxSavedQueue) {
+        start = qBound(0, m_index - 100, m_queue.count() - kMaxSavedQueue);
+        index = m_index - start;
+    }
+    QVariantList queue;
+    const int end = qMin(m_queue.count(), start + kMaxSavedQueue);
+    for (int i = start; i < end; ++i)
+        queue.append(m_queue[i]);
+
+    settings.setValue(base + QStringLiteral("/queue"),      queue);
+    settings.setValue(base + QStringLiteral("/index"),      index);
+    settings.setValue(base + QStringLiteral("/position"),   position());
+    settings.setValue(base + QStringLiteral("/shuffle"),    m_shuffle);
+    settings.setValue(base + QStringLiteral("/repeat"),     m_repeatMode);
+    settings.setValue(base + QStringLiteral("/sourceType"), m_sourceType);
+    settings.setValue(base + QStringLiteral("/sourceId"),   m_sourceId);
+    settings.setValue(base + QStringLiteral("/sourceName"), m_sourceName);
+}
+
+// Puts the last session back without touching QMediaPlayer, so nothing plays
+// and no stream is fetched. playPause() turns this into real playback.
+void Player::restoreSession(qint64 uid) {
+    // Never replace live playback — this also runs on a later login.
+    if (uid <= 0 || !m_queue.isEmpty()) return;
+
+    QSettings settings;
+    const QString base = sessionKey(uid);
+    const QVariantList queue = settings.value(base + QStringLiteral("/queue")).toList();
+    if (queue.isEmpty()) return;
+
+    for (const auto &v : queue)
+        m_queue.append(v.toMap());
+    m_index = qBound(0, settings.value(base + QStringLiteral("/index")).toInt(), m_queue.count() - 1);
+    m_pendingSeekMs     = qMax(0LL, settings.value(base + QStringLiteral("/position")).toLongLong());
+    m_lastSavedPosition = m_pendingSeekMs;
+    m_repeatMode        = settings.value(base + QStringLiteral("/repeat")).toInt();
+    m_shuffle           = settings.value(base + QStringLiteral("/shuffle")).toBool();
+    // The exact shuffle permutation is not stored: it is random anyway, and
+    // buildShuffleOrder() puts the restored track first.
+    if (m_shuffle) buildShuffleOrder();
+    m_sourceType   = settings.value(base + QStringLiteral("/sourceType")).toString();
+    m_sourceId     = settings.value(base + QStringLiteral("/sourceId")).toString();
+    m_sourceName   = settings.value(base + QStringLiteral("/sourceName")).toString();
+    m_currentTrack = trackFromMap(m_queue[m_index]);
+    m_sessionRestored = true;
+
+    emit queueChanged();
+    emit shuffleChanged(m_shuffle);
+    emit repeatModeChanged(m_repeatMode);
+    emit sourceChanged();
+    emit currentTrackChanged();
+    emit durationChanged(duration());
+    emit positionChanged(m_pendingSeekMs);
 }
 

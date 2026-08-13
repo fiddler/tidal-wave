@@ -66,6 +66,13 @@ public:
     Track currentTrack() const { return m_currentTrack; }
     qlonglong currentTrackId() const { return m_currentTrack.id; }
 
+    // ── Session persistence ─────────────────────────────────────────────
+    // The queue, the current track and the playback offset survive a restart.
+    // A restored session stays paused and holds no stream: the audio is only
+    // fetched when the user presses play, which then starts at the saved
+    // offset. Called on quit and periodically during playback.
+    void saveSession() const;
+
     // ── Chromecast handoff ──────────────────────────────────────────────
     // While casting, playback lives on the device: transport routes to the
     // CastSession and position/duration/playing mirror the device's status.
@@ -127,7 +134,10 @@ private slots:
 
 private:
     void handleUserIdChanged(qint64 uid);
-    void loadAndPlay(int index);
+    void restoreSession(qint64 uid);
+    // startMs > 0 resumes a restored session: the offset is applied once the
+    // media is loaded, not before, or QMediaPlayer drops the seek.
+    void loadAndPlay(int index, qint64 startMs = 0);
     void setLoading(bool l);
     Track trackFromMap(const QVariantMap &m) const;
     void buildShuffleOrder();
@@ -157,6 +167,13 @@ private:
     // playTracks() clear a stale "playing from" when a play has no source.
     bool                 m_pendingSource = false;
     QString              m_streamedQuality;
+
+    // Session restore. m_sessionRestored means "the queue is back but nothing
+    // was handed to QMediaPlayer yet"; m_pendingSeekMs is the offset that
+    // position() reports until the media is loaded and the seek is applied.
+    bool                 m_sessionRestored   = false;
+    qint64               m_pendingSeekMs     = 0;
+    qint64               m_lastSavedPosition = 0;
 
     // Cast state (non-null while casting; owned by CastManager).
     CastSession         *m_castSession   = nullptr;
