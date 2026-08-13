@@ -9,6 +9,7 @@
 
 class QNetworkReply;
 class CastSession;
+class DashFetcher;
 
 class Player : public QObject {
     Q_OBJECT
@@ -190,4 +191,5 @@ private:
     QString              m_preloadQuality;
     QTemporaryFile      *m_preloadTempFile = nullptr;
     QNetworkReply       *m_preloadDownload = nullptr;
+    DashFetcher         *m_preloadDash     = nullptr;
 };

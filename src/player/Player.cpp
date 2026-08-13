@@ -6,6 +6,7 @@
 #include <QSettings>
 #include <QDir>
 #include "cast/CastSession.h"
+#include "DashFetcher.h"
 #include "MpvAudio.h"
 #include <algorithm>
 #include <numeric>
@@ -629,6 +630,12 @@ void Player::cancelPreload() {
         dl->abort();
         dl->deleteLater();
     }
+    if (m_preloadDash) {
+        auto *df = m_preloadDash;
+        m_preloadDash = nullptr;
+        df->abort();
+        df->deleteLater();
+    }
     if (m_preloadTempFile) {
         m_preloadTempFile->remove();
         delete m_preloadTempFile;
@@ -672,16 +679,25 @@ void Player::preloadNext() {
                 }
             });
         } else {
-            auto *f = new QTemporaryFile(QDir::tempPath() + QStringLiteral("/tidal-wave-XXXXXX.mpd"));
-            f->setAutoRemove(false);
-            if (f->open()) {
-                f->write(manifest.url.toUtf8()); f->flush(); f->close();
-                m_preloadTempFile = f;
-                m_preloadReady    = true;
-            } else {
-                delete f;
+            auto *fetcher = new DashFetcher(m_client, manifest.url, this);
+            if (!fetcher->isValid()) {
+                delete fetcher;
                 m_preloadIndex = -1;
+                return;
             }
+            m_preloadDash = fetcher;
+            connect(fetcher, &DashFetcher::finished, this,
+                [this, fetcher, next](QTemporaryFile *file, const QString &) {
+                    if (m_preloadDash == fetcher) m_preloadDash = nullptr;
+                    fetcher->deleteLater();
+                    if (m_preloadIndex != next || !file) {
+                        if (file) { file->remove(); delete file; }
+                        return;
+                    }
+                    m_preloadTempFile = file;
+                    m_preloadReady    = true;
+                });
+            fetcher->start();
         }
     });
 }
