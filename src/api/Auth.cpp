@@ -1,9 +1,12 @@
 #include "Auth.h"
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRandomGenerator>
 #include <QStandardPaths>
+#include <QUrl>
 #include <QUrlQuery>
 #include <QDateTime>
 
@@ -53,11 +56,97 @@ void Auth::startDeviceFlow() {
         });
 }
 
+QString Auth::decodeCreds(const char *a, const char *b) {
+    return QString::fromUtf8(QByteArray::fromBase64(
+        QByteArray::fromBase64(QByteArray(a)) + QByteArray::fromBase64(QByteArray(b))));
+}
+
+void Auth::startPkceFlow() {
+    if (m_state == State::PendingPkce) return;
+
+    // RFC 7636 S256: 32 random bytes, base64url, no padding.
+    QByteArray raw(32, Qt::Uninitialized);
+    QRandomGenerator::system()->fillRange(
+        reinterpret_cast<quint32 *>(raw.data()), raw.size() / sizeof(quint32));
+    m_codeVerifier = QString::fromUtf8(
+        raw.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+
+    const QString challenge = QString::fromUtf8(
+        QCryptographicHash::hash(m_codeVerifier.toUtf8(), QCryptographicHash::Sha256)
+            .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+
+    m_clientUniqueKey = QString::number(QRandomGenerator::system()->generate64(), 16);
+
+    QUrlQuery q;
+    q.addQueryItem("response_type",        "code");
+    q.addQueryItem("redirect_uri",         kPkceRedirect);
+    q.addQueryItem("client_id",            pkceClientId());
+    q.addQueryItem("lang",                 "EN");
+    q.addQueryItem("appMode",              "android");
+    q.addQueryItem("client_unique_key",    m_clientUniqueKey);
+    q.addQueryItem("code_challenge",       challenge);
+    q.addQueryItem("code_challenge_method","S256");
+    q.addQueryItem("restrict_signup",      "true");
+
+    QUrl url(QString::fromLatin1(kPkceAuthUrl));
+    url.setQuery(q);
+    m_verificationUri = url.toString();
+    m_userCode.clear();
+    emit userCodeChanged();
+    setState(State::PendingPkce);
+}
+
+void Auth::submitPkceRedirect(const QString &redirectUrl) {
+    const QUrl url(redirectUrl.trimmed());
+    const QUrlQuery q(url);
+
+    if (q.hasQueryItem(QStringLiteral("error"))) {
+        emit loginFailed(q.queryItemValue(QStringLiteral("error_description"),
+                                          QUrl::FullyDecoded).isEmpty()
+                         ? q.queryItemValue(QStringLiteral("error"))
+                         : q.queryItemValue(QStringLiteral("error_description"),
+                                            QUrl::FullyDecoded));
+        return;
+    }
+
+    const QString code = q.queryItemValue(QStringLiteral("code"), QUrl::FullyDecoded);
+    if (code.isEmpty()) {
+        emit loginFailed(tr("That URL has no login code in it. Copy the whole address "
+                            "of the page Tidal sent you to, including everything after "
+                            "the '?'."));
+        return;
+    }
+
+    QUrlQuery form;
+    form.addQueryItem("code",              code);
+    form.addQueryItem("client_id",         pkceClientId());
+    form.addQueryItem("grant_type",        "authorization_code");
+    form.addQueryItem("redirect_uri",      kPkceRedirect);
+    form.addQueryItem("scope",             "r_usr w_usr w_sub");
+    form.addQueryItem("code_verifier",     m_codeVerifier);
+    form.addQueryItem("client_unique_key", m_clientUniqueKey);
+
+    m_api->postForm("oauth2/token", form, [this](QJsonObject obj, QString err) {
+        if (!err.isEmpty()) {
+            emit loginFailed(err);
+            return;
+        }
+        m_isPkce       = true;
+        m_accessToken  = obj["access_token"].toString();
+        m_refreshToken = obj["refresh_token"].toString();
+        m_tokenExpiry  = QDateTime::currentDateTime().addSecs(obj["expires_in"].toInt(3600));
+        m_api->setAccessToken(m_accessToken);
+        fetchSession();
+    });
+}
+
 void Auth::cancelDeviceFlow() {
     m_pollTimer->stop();
     m_deviceCode.clear();
     m_userCode.clear();
     m_verificationUri.clear();
+    m_codeVerifier.clear();
+    m_clientUniqueKey.clear();
     setState(State::LoggedOut);
 }
 
@@ -85,6 +174,7 @@ void Auth::pollForToken() {
             return;
         }
         m_pollTimer->stop();
+        m_isPkce       = false;
         m_accessToken  = obj["access_token"].toString();
         m_refreshToken = obj["refresh_token"].toString();
         m_tokenExpiry  = QDateTime::currentDateTime().addSecs(obj["expires_in"].toInt(3600));
@@ -99,11 +189,13 @@ void Auth::refreshAccessToken() {
         setState(State::LoggedOut);
         return;
     }
+    // A refresh grant must present the same client the token was issued to;
+    // crossing the pair gets the token rejected.
     QUrlQuery form;
     form.addQueryItem("grant_type", "refresh_token");
     form.addQueryItem("refresh_token", m_refreshToken);
-    form.addQueryItem("client_id", kClientId);
-    form.addQueryItem("client_secret", kClientSecret);
+    form.addQueryItem("client_id",     m_isPkce ? pkceClientId()     : QString::fromLatin1(kClientId));
+    form.addQueryItem("client_secret", m_isPkce ? pkceClientSecret() : QString::fromLatin1(kClientSecret));
 
     m_api->postForm("oauth2/token", form, [this](QJsonObject obj, QString err) {
         if (!err.isEmpty()) {
@@ -176,6 +268,7 @@ void Auth::loadCredentials() {
     m_userId       = obj["user_id"].toVariant().toLongLong();
     m_countryCode  = obj["country_code"].toString();
     m_username     = obj["username"].toString();
+    m_isPkce       = obj["is_pkce"].toBool(false);
 
     if (m_accessToken.isEmpty() || m_refreshToken.isEmpty()) return;
 
@@ -205,6 +298,7 @@ void Auth::saveCredentials() {
     obj["user_id"]       = m_userId;
     obj["country_code"]  = m_countryCode;
     obj["username"]      = m_username;
+    obj["is_pkce"]       = m_isPkce;
 
     QFile f(path);
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -225,6 +319,9 @@ void Auth::logout() {
     m_deviceCode.clear();
     m_userCode.clear();
     m_countryCode.clear();
+    m_codeVerifier.clear();
+    m_clientUniqueKey.clear();
+    m_isPkce = false;
     m_userId = 0;
     m_api->setAccessToken({});
     clearCredentials();

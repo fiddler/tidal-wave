@@ -4,9 +4,24 @@ import QtQuick.Controls
 import TidalWave
 
 Rectangle {
+    id: root
     color: Theme.bg
 
     property string errorMessage: ""
+
+    // The authorize URL only exists after startPkceFlow() builds it, and that
+    // call is synchronous, so the browser can be opened on the next line.
+    function beginPkce() {
+        errorMessage = ""
+        auth.startPkceFlow()
+        Qt.openUrlExternally(auth.verificationUrl)
+    }
+
+    function submitRedirect() {
+        if (redirectField.text.trim().length === 0) return
+        errorMessage = ""
+        auth.submitPkceRedirect(redirectField.text)
+    }
 
     Connections {
         target: auth
@@ -65,7 +80,10 @@ Rectangle {
             color: Theme.surface
             border.color: Theme.border
             border.width: 1
-            height: auth.state === 0 ? (errorMessage.length > 0 ? 260 : 220) : auth.state === 1 ? 400 : 100
+            height: auth.state === 0 ? (errorMessage.length > 0 ? 320 : 280)
+                    : auth.state === 1 ? 400
+                    : auth.state === 3 ? (errorMessage.length > 0 ? 420 : 370)
+                    : 100
             Behavior on height { NumberAnimation { duration: 200 } }
 
             ColumnLayout {
@@ -97,8 +115,8 @@ Rectangle {
                         Behavior on scale { NumberAnimation { duration: 100 } }
 
                         activeFocusOnTab: true
-                        Keys.onReturnPressed: auth.startDeviceFlow()
-                        Keys.onSpacePressed:  auth.startDeviceFlow()
+                        Keys.onReturnPressed: root.beginPkce()
+                        Keys.onSpacePressed:  root.beginPkce()
 
                         Text {
                             anchors.centerIn: parent
@@ -108,7 +126,7 @@ Rectangle {
                             font.bold: true
                         }
                         HoverHandler { id: loginHov; cursorShape: Qt.PointingHandCursor }
-                        TapHandler   { onTapped: auth.startDeviceFlow() }
+                        TapHandler   { onTapped: root.beginPkce() }
                     }
 
                     Text {
@@ -116,6 +134,26 @@ Rectangle {
                         text: "Requires an active Tidal subscription"
                         color: Theme.textDim
                         font.pixelSize: 12
+                    }
+
+                    // Device code is the old flow. Tidal caps it at 320 kbps AAC,
+                    // so it stays only as a way in if PKCE login breaks.
+                    Text {
+                        id: deviceFallback
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "Use device code instead (no lossless)"
+                        color: deviceFallback.activeFocus ? Theme.accent : Theme.textDim
+                        font.pixelSize: 12
+                        font.underline: true
+                        activeFocusOnTab: true
+                        Keys.onReturnPressed: auth.startDeviceFlow()
+                        Keys.onSpacePressed:  auth.startDeviceFlow()
+                        MouseArea {
+                            anchors.fill: parent
+                            anchors.margins: -6
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: auth.startDeviceFlow()
+                        }
                     }
 
                     Text {
@@ -127,6 +165,112 @@ Rectangle {
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
                         horizontalAlignment: Text.AlignHCenter
+                    }
+                }
+
+                // PKCE pending — the redirect lands on a real tidal.com page, so
+                // the app cannot catch it. The user pastes the address back.
+                ColumnLayout {
+                    visible: auth.state === 3
+                    spacing: 14
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Log in in the browser window that just opened. Tidal then "
+                              + "sends you to a page that says \"Oops\" — that is expected. "
+                              + "Copy that page's full address and paste it below."
+                        color: Theme.textSec
+                        font.pixelSize: 13
+                        wrapMode: Text.WordWrap
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
+                    Text {
+                        id: reopenLink
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "Browser did not open? Click here"
+                        color: reopenLink.activeFocus ? Theme.textPrimary : Theme.accent
+                        font.pixelSize: 12
+                        activeFocusOnTab: true
+                        Keys.onReturnPressed: Qt.openUrlExternally(auth.verificationUrl)
+                        Keys.onSpacePressed:  Qt.openUrlExternally(auth.verificationUrl)
+                        MouseArea {
+                            anchors.fill: parent
+                            anchors.margins: -6
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Qt.openUrlExternally(auth.verificationUrl)
+                        }
+                    }
+
+                    TextField {
+                        id: redirectField
+                        Layout.fillWidth: true
+                        placeholderText: "https://tidal.com/android/login/auth?code=…"
+                        color: Theme.textPrimary
+                        placeholderTextColor: Theme.textDim
+                        font.pixelSize: 12
+                        selectByMouse: true
+                        background: Rectangle {
+                            radius: Theme.radius
+                            color: Theme.surfaceHigh
+                            border.color: redirectField.activeFocus ? Theme.accent : Theme.border
+                            border.width: 1
+                        }
+                        onAccepted: root.submitRedirect()
+                    }
+
+                    Rectangle {
+                        id: continueBtn
+                        Layout.fillWidth: true
+                        height: 44
+                        radius: Theme.radius
+                        color: redirectField.text.length > 0 ? Theme.accent : Theme.surfaceHigh
+                        border.width: continueBtn.activeFocus ? 2 : 0
+                        border.color: Theme.textPrimary
+                        activeFocusOnTab: true
+                        Keys.onReturnPressed: root.submitRedirect()
+                        Keys.onSpacePressed:  root.submitRedirect()
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Complete login"
+                            color: redirectField.text.length > 0 ? "white" : Theme.textDim
+                            font.pixelSize: 14
+                            font.bold: true
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.submitRedirect()
+                        }
+                    }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        visible: errorMessage.length > 0
+                        text: errorMessage
+                        color: Theme.red
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
+                    Text {
+                        id: cancelPkce
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "Cancel"
+                        color: cancelPkce.activeFocus ? Theme.accent : Theme.textSec
+                        font.pixelSize: 13
+                        font.underline: cancelPkce.activeFocus
+                        activeFocusOnTab: true
+                        Keys.onReturnPressed: auth.cancelDeviceFlow()
+                        Keys.onSpacePressed:  auth.cancelDeviceFlow()
+                        MouseArea {
+                            anchors.fill: parent
+                            anchors.margins: -6
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: auth.cancelDeviceFlow()
+                        }
                     }
                 }
 
