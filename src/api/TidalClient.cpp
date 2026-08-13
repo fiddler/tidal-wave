@@ -384,6 +384,22 @@ void TidalClient::addTracksToPlaylist(const QString &uuid, const QList<qint64> &
         });
 }
 
+// Reordering posts to the item's own index with the destination in the form,
+// guarded by the playlist ETag exactly like add and remove.
+void TidalClient::moveTrackInPlaylist(const QString &uuid, int fromIndex, int toIndex,
+    std::function<void(bool)> cb)
+{
+    if (fromIndex == toIndex || fromIndex < 0 || toIndex < 0) { cb(false); return; }
+    m_api->getEtag(QStringLiteral("playlists/%1").arg(uuid),
+        [this, uuid, fromIndex, toIndex, cb](QString etag, QString err) {
+            if (!err.isEmpty()) { cb(false); return; }
+            QUrlQuery form;
+            form.addQueryItem("toIndex", QString::number(toIndex));
+            m_api->postApiFormEtag(QStringLiteral("playlists/%1/items/%2").arg(uuid).arg(fromIndex),
+                form, etag, [cb](QJsonObject, QString e) { cb(e.isEmpty()); });
+        });
+}
+
 void TidalClient::removeTrackFromPlaylist(const QString &uuid, int itemIndex,
     std::function<void(bool)> cb)
 {

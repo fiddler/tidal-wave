@@ -188,7 +188,11 @@ ApplicationWindow {
         if (page === "home") return homeLoader
         if (page === "search") return searchLoader
         if (page === "collection") return collectionLoader
-        if (["album", "artist", "playlist", "mix", "nowplaying"].indexOf(page) !== -1) return detailLoader
+        // Must list every page detailLoader can show, or window-level features
+        // that reach into the page (Cmd+A, Escape clearing a selection) go dead
+        // there. "radio" was already missing before the local pages arrived.
+        if (["album", "artist", "playlist", "mix", "nowplaying", "radio",
+             "local", "localplaylist"].indexOf(page) !== -1) return detailLoader
         return null
     }
 
@@ -590,11 +594,26 @@ ApplicationWindow {
             ghost.kind    = kind
             return ghost
         }
-        function show() { ghost.visible = true }
+        // Publish the state before the ghost goes live: showing it sets
+        // Drag.active, and Qt delivers DragEnter synchronously from that
+        // assignment, so a target reading DragState must already see it.
+        function show() {
+            DragState.begin(ghost.payload, ghost.kind)
+            ghost.visible = true
+        }
+        // A drag ends in one of two ways: Drag.drop() delivers a drop event to
+        // whatever target is under the cursor, while merely clearing active
+        // cancels it. Releasing the mouse must therefore call this, or no drop
+        // is ever delivered.
+        function drop() { if (ghost.visible) ghost.Drag.drop() }
+        // The single place a drag ends. Owning both halves here means a row
+        // that gets recycled mid-drag — which ListView does freely once the
+        // list scrolls — cannot leave the state stuck on.
         function release() {
             ghost.visible = false
             ghost.payload = []
             ghost.kind    = ""
+            DragState.end()
         }
 
         Item {
@@ -605,6 +624,10 @@ ApplicationWindow {
 
             property var    payload: []
             property string kind: ""
+
+            // Reported so targets can react to proximity, not just contact.
+            onXChanged: DragState.px = x
+            onYChanged: DragState.py = y
 
             // hotSpot 0,0 on a 1x1 item means drop targets are tested against
             // this item's origin — which beginDrag() pins to the cursor. Any

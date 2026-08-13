@@ -54,6 +54,7 @@ public:
     // Playlist management
     Q_INVOKABLE void createPlaylist         (const QString &title, QJSValue cb);
     Q_INVOKABLE void addTracksToPlaylist    (const QString &uuid, const QVariantList &trackIds, QJSValue cb);
+    Q_INVOKABLE void moveTrackInPlaylist    (const QString &uuid, int fromIndex, int toIndex, QJSValue cb);
     Q_INVOKABLE void removeTrackFromPlaylist(const QString &uuid, int itemIndex, QJSValue cb);
     Q_INVOKABLE QVariantList getUserPlaylists() const;
     Q_INVOKABLE void markPlaylistPlayed     (const QString &uuid);

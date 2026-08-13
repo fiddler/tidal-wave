@@ -12,6 +12,8 @@ QtObject {
     property bool   active: false
     property int    count:  0
     property string kind:   ""      // "local" | "tidal"
+    property real   px: 0           // pointer position, in scene coordinates
+    property real   py: 0
 
     function begin(payload, k) {
         count  = payload ? payload.length : 0

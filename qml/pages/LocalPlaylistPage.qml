@@ -199,6 +199,17 @@ Rectangle {
         ScrollBar.vertical: ScrollBar { active: true; policy: ScrollBar.AsNeeded }
     }
 
+    // Drag the selection within the list to reorder it.
+    ReorderDropArea {
+        anchors.fill: tracksList
+        view: tracksList
+        selection: trackSel
+        kind: "local"
+        onReorder: (fromIndices, toIndex) => {
+            library.movePlaylistItems(root.localPlaylistId, fromIndices, toIndex)
+        }
+    }
+
     Text {
         anchors.centerIn: parent
         anchors.verticalCenterOffset: 60

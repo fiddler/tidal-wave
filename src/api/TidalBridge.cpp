@@ -370,6 +370,12 @@ void TidalBridge::addTracksToPlaylist(const QString &uuid, const QVariantList &t
     });
 }
 
+void TidalBridge::moveTrackInPlaylist(const QString &uuid, int fromIndex, int toIndex, QJSValue cb) {
+    m_client->moveTrackInPlaylist(uuid, fromIndex, toIndex, [this, cb](bool success) mutable {
+        call(cb, { success });
+    });
+}
+
 void TidalBridge::removeTrackFromPlaylist(const QString &uuid, int itemIndex, QJSValue cb) {
     m_client->removeTrackFromPlaylist(uuid, itemIndex, [this, cb](bool success) mutable {
         call(cb, { success });

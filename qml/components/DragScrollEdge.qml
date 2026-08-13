@@ -29,9 +29,21 @@ Item {
         && (direction < 0 ? view.contentY > 0
                           : view.contentY < view.contentHeight - view.height)
 
-    // Only meaningful while something is being dragged, and only on the side
-    // the list can still move towards.
-    readonly property bool armed: DragState.active && canScroll
+    // How close the pointer must get before the zone shows itself. Announcing
+    // it for the whole drag made it light up while the cursor was still over
+    // the track list, half a window away, which reads as a glitch.
+    property int proximity: 48
+
+    readonly property bool pointerNear: {
+        if (!DragState.active || !view) return false
+        var p = view.mapFromItem(null, DragState.px, DragState.py)
+        return p.x > -proximity && p.x < view.width + proximity
+            && p.y > -proximity && p.y < view.height + proximity
+    }
+
+    // Only meaningful while something is being dragged, on the side the list
+    // can still move towards, and once the pointer is actually near it.
+    readonly property bool armed: DragState.active && canScroll && pointerNear
 
     DropArea {
         id: sensor

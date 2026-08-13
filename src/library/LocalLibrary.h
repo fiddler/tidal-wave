@@ -61,6 +61,9 @@ public:
     Q_INVOKABLE void   addToPlaylist(qint64 playlistId, const QVariantList &localIds);
     Q_INVOKABLE void   removeFromPlaylist(qint64 playlistId, int position);
     Q_INVOKABLE void   movePlaylistItem(qint64 playlistId, int from, int to);
+    // Drag-reorder moves everything that was selected, as one block, to the
+    // position the row was dropped at.
+    Q_INVOKABLE void   movePlaylistItems(qint64 playlistId, const QVariantList &fromIndices, int toIndex);
 
 signals:
     void tracksChanged();
@@ -87,6 +90,8 @@ private:
     // see the implementation for the exact order. Results are cached per
     // directory so a 12-track album scans its folder once, not twelve times.
     QString findFolderCover(const QString &audioPath) const;
+    QList<qint64> playlistOrder(qint64 playlistId) const;
+    void writePlaylistOrder(qint64 playlistId, const QList<qint64> &order);
     mutable QHash<QString, QString> m_folderCoverCache;
 
     QSqlDatabase m_db;

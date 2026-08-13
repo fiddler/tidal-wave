@@ -114,6 +114,7 @@ public:
     // Playlist management
     void createPlaylist          (const QString &title, std::function<void(Playlist,QString)> cb);
     void addTracksToPlaylist     (const QString &uuid,  const QList<qint64> &trackIds, std::function<void(bool)> cb);
+    void moveTrackInPlaylist     (const QString &uuid,  int fromIndex, int toIndex, std::function<void(bool)> cb);
     void removeTrackFromPlaylist (const QString &uuid,  int itemIndex,  std::function<void(bool)> cb);
 
     // Track features

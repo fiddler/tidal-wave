@@ -96,24 +96,26 @@ Item {
         root.dragProxy.y = p.y
     }
 
-    function endDrag() {
+    // ListView destroys delegates that scroll far enough out of view. If that
+    // happens to the row holding the drag, nothing else would ever release it.
+    Component.onDestruction: {
+        if (root.dragProxy && Window.window && Window.window.dragLayer)
+            Window.window.dragLayer.release()
+    }
+
+    function endDrag(deliver) {
+        var layer = Window.window.dragLayer
+        if (layer && root.dragProxy && deliver) layer.drop()   // deliver, then tear down
         root.dragProxy = null
-        if (Window.window.dragLayer) Window.window.dragLayer.release()
+        if (layer) layer.release()
     }
 
     readonly property bool dragActive: hov.drag.active
     onDragActiveChanged: {
         var layer = Window.window.dragLayer
         if (!layer) return
-        if (root.dragActive) {
-            root.didDrag = true
-            layer.show()
-            DragState.begin(root.selection ? root.selection.selectedTracks() : [],
-                            root.isLocalTrack ? "local" : "tidal")
-        } else {
-            layer.release()
-            DragState.end()
-        }
+        if (root.dragActive) { root.didDrag = true; layer.show() }
+        else                  layer.release()
     }
 
     signal playRequested()
@@ -151,6 +153,10 @@ Item {
 
             drag.target: root.selection ? root.dragProxy : null
             drag.threshold: 8
+            // ListView is a Flickable and steals the grab as soon as the
+            // pointer moves along its scroll axis, which cancelled every
+            // vertical drag — exactly the ones that reorder a playlist.
+            preventStealing: root.selection !== null
 
             // A press that turns into a drag must carry the whole selection,
             // so the row joins the selection on press rather than on release.
@@ -161,8 +167,8 @@ Item {
                 root.beginDrag(mouse)
             }
 
-            onReleased: root.endDrag()
-            onCanceled: root.endDrag()
+            onReleased: root.endDrag(true)    // a real release drops
+            onCanceled: root.endDrag(false)   // a cancelled grab does not
 
             // Click selects; double click plays — matching the Tidal client
             // and the desktop convention.

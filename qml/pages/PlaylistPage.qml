@@ -243,6 +243,31 @@ Rectangle {
         }
     }
 
+    // Drag the selection within the list to reorder it. Editable playlists
+    // only: Tidal rejects reordering an editorial one.
+    ReorderDropArea {
+        anchors.fill: tracksList
+        view: tracksList
+        selection: trackSel
+        kind: root.isUserPlaylist ? "tidal" : ""
+        onReorder: (fromIndices, toIndex) => {
+            // Tidal moves one item per request, so a multi-row drag is applied
+            // one row at a time. Walking from the bottom up keeps the indices
+            // of the rows still to move unchanged.
+            var ordered = fromIndices.slice().sort(function(a, b) { return a - b })
+            var step = function(k, insertAt) {
+                if (k < 0) { root.loadPlaylist(); return }
+                var from = ordered[k]
+                var to = from < insertAt ? insertAt - 1 : insertAt
+                if (from === to) { step(k - 1, insertAt); return }
+                bridge.moveTrackInPlaylist(root.playlistUuid, from, to, function(ok) {
+                    step(k - 1, to)
+                })
+            }
+            step(ordered.length - 1, toIndex)
+        }
+    }
+
     // Back button sits in a fixed bar that doesn't overlap the track list
     Rectangle {
         anchors { top: parent.top; left: parent.left; right: parent.right }

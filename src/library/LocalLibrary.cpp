@@ -1,5 +1,6 @@
 #include "LocalLibrary.h"
 
+#include <algorithm>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
@@ -609,21 +610,19 @@ void LocalLibrary::removeFromPlaylist(qint64 playlistId, int position) {
     emit playlistsChanged();
 }
 
-void LocalLibrary::movePlaylistItem(qint64 playlistId, int from, int to) {
-    if (from == to) return;
-
+QList<qint64> LocalLibrary::playlistOrder(qint64 playlistId) const {
     QSqlQuery ids(m_db);
     ids.prepare(QStringLiteral("SELECT track_id FROM playlist_items WHERE playlist_id = :p"
                                " ORDER BY position"));
     ids.bindValue(QStringLiteral(":p"), playlistId);
     QList<qint64> order;
     if (ids.exec()) while (ids.next()) order << ids.value(0).toLongLong();
+    return order;
+}
 
-    if (from < 0 || from >= order.size() || to < 0 || to >= order.size()) return;
-    order.move(from, to);
-
-    // Rewrite the whole sequence: simpler than shuffling positions around, and
-    // these lists are small enough that it costs nothing.
+// Rewrite the whole sequence: simpler than shuffling positions around, and
+// these lists are small enough that it costs nothing.
+void LocalLibrary::writePlaylistOrder(qint64 playlistId, const QList<qint64> &order) {
     m_db.transaction();
     QSqlQuery clear(m_db);
     clear.prepare(QStringLiteral("DELETE FROM playlist_items WHERE playlist_id = :p"));
@@ -640,4 +639,37 @@ void LocalLibrary::movePlaylistItem(qint64 playlistId, int from, int to) {
     }
     m_db.commit();
     emit playlistsChanged();
+}
+
+void LocalLibrary::movePlaylistItem(qint64 playlistId, int from, int to) {
+    if (from == to) return;
+    QList<qint64> order = playlistOrder(playlistId);
+    if (from < 0 || from >= order.size() || to < 0 || to >= order.size()) return;
+    order.move(from, to);
+    writePlaylistOrder(playlistId, order);
+}
+
+void LocalLibrary::movePlaylistItems(qint64 playlistId, const QVariantList &fromIndices, int toIndex) {
+    QList<qint64> order = playlistOrder(playlistId);
+
+    QList<int> from;
+    for (const QVariant &v : fromIndices) {
+        const int i = v.toInt();
+        if (i >= 0 && i < order.size() && !from.contains(i)) from << i;
+    }
+    if (from.isEmpty()) return;
+    std::sort(from.begin(), from.end());
+
+    // toIndex counts positions in the list as it looks now, so subtract the
+    // moved rows that sit above the drop point — they are about to leave.
+    int above = 0;
+    for (int i : from) if (i < toIndex) ++above;
+    const int target = qBound(0, toIndex - above, order.size() - from.size());
+
+    QList<qint64> moved;
+    for (int i : from) moved << order.at(i);
+    for (int k = from.size() - 1; k >= 0; --k) order.removeAt(from.at(k));
+    for (int k = 0; k < moved.size(); ++k) order.insert(target + k, moved.at(k));
+
+    writePlaylistOrder(playlistId, order);
 }
