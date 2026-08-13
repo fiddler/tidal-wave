@@ -33,6 +33,57 @@ Rectangle {
 
     onPlaylistUuidChanged: if (playlistUuid.length > 0) loadPlaylist()
 
+    // The list as it will look once the move lands. Mirrors the ordering the
+    // server is asked for, so the optimistic view matches the result.
+    function reorderedTracks(list, fromIndices, toIndex) {
+        var from = fromIndices.slice().sort(function(a, b) { return a - b })
+        var above = 0
+        for (var i = 0; i < from.length; i++) if (from[i] < toIndex) above++
+        var target = Math.max(0, Math.min(toIndex - above, list.length - from.length))
+        var moved = []
+        for (var j = 0; j < from.length; j++) moved.push(list[from[j]])
+        var rest = list.slice()
+        for (var k = from.length - 1; k >= 0; k--) rest.splice(from[k], 1)
+        for (var m = 0; m < moved.length; m++) rest.splice(target + m, 0, moved[m])
+        return rest
+    }
+
+    // Refetch without raising the loading overlay — used to resync after a
+    // failed write, where the server is the only trustworthy source.
+    function silentReload() {
+        bridge.fetchPlaylistTracks(playlistUuid, function(t, err) { if (!err) root.tracks = t })
+    }
+
+    // Tidal moves one row per request, each preceded by an ETag fetch, so a
+    // drag would otherwise freeze the list for seconds. Show the result at
+    // once and reconcile in the background.
+    function reorderTracks(fromIndices, toIndex) {
+        if (!root.isUserPlaylist || fromIndices.length === 0) return
+        root.tracks = root.reorderedTracks(root.tracks, fromIndices, toIndex)
+        SyncState.begin("Syncing playlist changes…")
+
+        // Walk bottom-up so the indices of the rows still to move stay valid.
+        var ordered = fromIndices.slice().sort(function(a, b) { return a - b })
+        var step = function(k, insertAt) {
+            if (k < 0) { SyncState.end(); return }
+            var from = ordered[k]
+            var to = from < insertAt ? insertAt - 1 : insertAt
+            if (from === to) { step(k - 1, insertAt); return }
+            bridge.moveTrackInPlaylist(root.playlistUuid, from, to, function(ok) {
+                if (!ok) {
+                    // Part of the move may have landed, so take the server's
+                    // word for the order rather than assuming the old one.
+                    SyncState.fail("Tidal rejected the new order for “" + root.playlistTitle
+                                   + "”. The list has been put back to what Tidal has.")
+                    root.silentReload()
+                    return
+                }
+                step(k - 1, to)
+            })
+        }
+        step(ordered.length - 1, toIndex)
+    }
+
     function loadPlaylist() {
         loading = true
         bridge.fetchPlaylistTracks(playlistUuid, function(t, err) {
@@ -250,22 +301,7 @@ Rectangle {
         view: tracksList
         selection: trackSel
         kind: root.isUserPlaylist ? "tidal" : ""
-        onReorder: (fromIndices, toIndex) => {
-            // Tidal moves one item per request, so a multi-row drag is applied
-            // one row at a time. Walking from the bottom up keeps the indices
-            // of the rows still to move unchanged.
-            var ordered = fromIndices.slice().sort(function(a, b) { return a - b })
-            var step = function(k, insertAt) {
-                if (k < 0) { root.loadPlaylist(); return }
-                var from = ordered[k]
-                var to = from < insertAt ? insertAt - 1 : insertAt
-                if (from === to) { step(k - 1, insertAt); return }
-                bridge.moveTrackInPlaylist(root.playlistUuid, from, to, function(ok) {
-                    step(k - 1, to)
-                })
-            }
-            step(ordered.length - 1, toIndex)
-        }
+        onReorder: (fromIndices, toIndex) => root.reorderTracks(fromIndices, toIndex)
     }
 
     // Back button sits in a fixed bar that doesn't overlap the track list

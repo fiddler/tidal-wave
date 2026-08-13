@@ -570,6 +570,15 @@ ApplicationWindow {
         }
     }
 
+    // Background playlist writes report here rather than blocking the page.
+    SyncIndicator {
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: 24
+        anchors.bottomMargin: 104
+        z: 9000
+    }
+
     // ── track drag ghost ───────────────────────────────
     // One shared ghost for the whole window. TrackRow borrows it while a drag
     // is in flight; drop targets read `drag.source.payload` and
