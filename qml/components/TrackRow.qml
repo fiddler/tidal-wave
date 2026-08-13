@@ -20,6 +20,13 @@ Item {
     property bool   showCover: true
     property var    trackData: null   // full track map (has albumId, id, etc.)
 
+    // The track the player is on, whether or not it is playing. isPlaying is
+    // false while paused — and after a session restore, where the queue is
+    // back but no stream is loaded — so it cannot mark the row on its own.
+    // Derived here rather than passed in by every page that shows a track.
+    readonly property bool isCurrent: !!(trackData && player.currentTrack
+                                         && player.currentTrack.id === trackData.id)
+
     // Local library tracks have no Tidal id, so every action that talks to
     // Tidal (download, favourite, radio, album/artist links, share URL) is
     // hidden for them. Playback and queueing work exactly the same.
@@ -138,7 +145,7 @@ Item {
         anchors.margins: 2
         radius: 6
         color: root.selected ? Qt.rgba(1, 1, 1, 0.13)
-               : isPlaying ? Qt.rgba(0, 0.698, 0.973, 0.08)
+               : (isPlaying || isCurrent) ? Qt.rgba(0, 0.698, 0.973, 0.08)
                : hov.hovered ? Theme.surfaceHov : "transparent"
         border.width: root.activeFocus ? 2 : 0
         border.color: Theme.accent
@@ -200,14 +207,14 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 Text {
                     anchors.centerIn: parent
-                    visible: !isPlaying && !hov.hovered
+                    visible: !isCurrent && !hov.hovered
                     text: root.trackNum
                     color: Theme.textDim
                     font.pixelSize: 13
                 }
                 VectorIcon {
                     anchors.centerIn: parent
-                    visible: isPlaying && !hov.hovered
+                    visible: isCurrent && !hov.hovered
                     name: "music"
                     color: Theme.accent
                     width: 14
@@ -245,7 +252,7 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     text: root.title
-                    color: isPlaying ? Theme.accent : Theme.textPrimary
+                    color: (isPlaying || isCurrent) ? Theme.accent : Theme.textPrimary
                     font.pixelSize: 14
                     elide: Text.ElideRight
                 }
