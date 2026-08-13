@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QVariantMap>
 #include <QVariantList>
+#include <QHash>
 #include <QSqlDatabase>
 #include <QStringList>
 #include <QUrl>
@@ -44,6 +45,23 @@ public:
     Q_INVOKABLE void removeTracks(const QVariantList &localIds);
     Q_INVOKABLE bool hasAudioUrls(const QList<QUrl> &urls) const;
 
+    // Re-resolves folder cover art for tracks that still have none. Pure
+    // filesystem work (no ffmpeg), so it is cheap enough to run at startup and
+    // backfill tracks imported before folder covers were supported. Returns the
+    // number of tracks updated.
+    Q_INVOKABLE int rescanCovers();
+
+    // ─── playlists ─────────────────────────────────────
+    Q_INVOKABLE QVariantList playlists() const;
+    Q_INVOKABLE QVariantMap  playlist(qint64 playlistId) const;
+    Q_INVOKABLE QVariantList playlistTracks(qint64 playlistId) const;
+    Q_INVOKABLE qint64 createPlaylist(const QString &title);
+    Q_INVOKABLE void   renamePlaylist(qint64 playlistId, const QString &title);
+    Q_INVOKABLE void   deletePlaylist(qint64 playlistId);
+    Q_INVOKABLE void   addToPlaylist(qint64 playlistId, const QVariantList &localIds);
+    Q_INVOKABLE void   removeFromPlaylist(qint64 playlistId, int position);
+    Q_INVOKABLE void   movePlaylistItem(qint64 playlistId, int from, int to);
+
 signals:
     void tracksChanged();
     void playlistsChanged();
@@ -63,6 +81,13 @@ private:
     void probeNext();
     void finishImport();
     QString extractCover(const QString &path, qint64 rowId) const;
+
+    // Cover art next to the file, when the file carries none itself. Follows
+    // the naming convention every other player uses (cover/folder/front/…);
+    // see the implementation for the exact order. Results are cached per
+    // directory so a 12-track album scans its folder once, not twelve times.
+    QString findFolderCover(const QString &audioPath) const;
+    mutable QHash<QString, QString> m_folderCoverCache;
 
     QSqlDatabase m_db;
     QString      m_coverDir;

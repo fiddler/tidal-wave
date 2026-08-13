@@ -78,6 +78,7 @@ void LocalLibrary::openDatabase() {
     }
     QSqlQuery(QStringLiteral("PRAGMA foreign_keys = ON"), m_db);
     createSchema();
+    rescanCovers();   // backfill tracks imported before folder covers existed
 }
 
 void LocalLibrary::createSchema() {
@@ -203,6 +204,7 @@ void LocalLibrary::importUrls(const QList<QUrl> &urls) {
         return;
     }
 
+    m_folderCoverCache.clear();
     m_pending      = files;
     m_pendingTotal = files.size();
     m_added = m_skipped = m_failed = 0;
@@ -285,16 +287,17 @@ void LocalLibrary::probeNext() {
 
             if (ins.exec()) {
                 ++m_added;
-                if (hasCoverStream) {
-                    const qint64 rowId = ins.lastInsertId().toLongLong();
-                    const QString cover = extractCover(path, rowId);
-                    if (!cover.isEmpty()) {
-                        QSqlQuery up(m_db);
-                        up.prepare(QStringLiteral("UPDATE tracks SET cover = :c WHERE id = :id"));
-                        up.bindValue(QStringLiteral(":c"), cover);
-                        up.bindValue(QStringLiteral(":id"), rowId);
-                        up.exec();
-                    }
+                const qint64 rowId = ins.lastInsertId().toLongLong();
+                // Embedded art wins: it is per-track, so it stays correct on
+                // compilations where one folder image would not be.
+                QString cover = hasCoverStream ? extractCover(path, rowId) : QString();
+                if (cover.isEmpty()) cover = findFolderCover(path);
+                if (!cover.isEmpty()) {
+                    QSqlQuery up(m_db);
+                    up.prepare(QStringLiteral("UPDATE tracks SET cover = :c WHERE id = :id"));
+                    up.bindValue(QStringLiteral(":c"), cover);
+                    up.bindValue(QStringLiteral(":id"), rowId);
+                    up.exec();
                 }
             } else {
                 ++m_failed;
@@ -332,6 +335,103 @@ QString LocalLibrary::extractCover(const QString &path, qint64 rowId) const {
         return {};
     }
     return QFileInfo::exists(out) ? out : QString();
+}
+
+QString LocalLibrary::findFolderCover(const QString &audioPath) const {
+    const QFileInfo audio(audioPath);
+    const QString   dirPath = audio.absolutePath();
+
+    const auto cached = m_folderCoverCache.constFind(dirPath);
+    if (cached != m_folderCoverCache.constEnd()) return *cached;
+
+    static const QStringList imageSuffixes{
+        QStringLiteral("jpg"), QStringLiteral("jpeg"), QStringLiteral("png"),
+        QStringLiteral("webp"), QStringLiteral("bmp"), QStringLiteral("gif")};
+    // Priority order. cover.* is the common Unix default (MPD, Kodi, beets,
+    // Picard); folder.* comes from Windows Media Player; front.* from CD
+    // ripping tools. Matched case-insensitively — a case-sensitive match would
+    // miss "Cover.jpg" on Linux.
+    static const QStringList conventional{
+        QStringLiteral("cover"), QStringLiteral("folder"), QStringLiteral("front"),
+        QStringLiteral("album"), QStringLiteral("albumart"), QStringLiteral("art"),
+        QStringLiteral("thumb")};
+
+    QFileInfoList images;
+    for (const QFileInfo &f : QDir(dirPath).entryInfoList(
+             QDir::Files | QDir::NoSymLinks | QDir::Hidden, QDir::Name)) {
+        if (imageSuffixes.contains(f.suffix().toLower())) images << f;
+    }
+
+    // Amarok writes ".folder.png"; drop a leading dot before comparing.
+    auto stem = [](const QFileInfo &f) {
+        QString b = f.completeBaseName();
+        if (b.startsWith(QLatin1Char('.'))) b = b.mid(1);
+        return b;
+    };
+
+    QString found;
+    for (const QString &name : conventional) {
+        for (const QFileInfo &f : images) {
+            if (stem(f).compare(name, Qt::CaseInsensitive) == 0) { found = f.absoluteFilePath(); break; }
+        }
+        if (!found.isEmpty()) break;
+    }
+
+    // Windows Media Player's own cache files, e.g. AlbumArt_{GUID}_Large.jpg.
+    if (found.isEmpty()) {
+        for (const QFileInfo &f : images) {
+            const QString b = stem(f);
+            if (b.startsWith(QLatin1String("AlbumArt"), Qt::CaseInsensitive)
+                && b.endsWith(QLatin1String("Large"), Qt::CaseInsensitive)) {
+                found = f.absoluteFilePath();
+                break;
+            }
+        }
+    }
+
+    // An image named after the track itself — the single-file album case.
+    if (found.isEmpty()) {
+        for (const QFileInfo &f : images) {
+            if (stem(f).compare(audio.completeBaseName(), Qt::CaseInsensitive) == 0) {
+                found = f.absoluteFilePath();
+                break;
+            }
+        }
+    }
+
+    // Last resort: the only image in the folder. Deliberately requires exactly
+    // one — a folder full of booklet scans (scan_01.jpg, scan_02.jpg …) has no
+    // way to say which one is the front, so it gets no cover instead of a
+    // random page.
+    if (found.isEmpty() && images.size() == 1) found = images.first().absoluteFilePath();
+
+    m_folderCoverCache.insert(dirPath, found);
+    return found;
+}
+
+int LocalLibrary::rescanCovers() {
+    m_folderCoverCache.clear();
+
+    QSqlQuery q(QStringLiteral(
+        "SELECT id, path FROM tracks WHERE cover IS NULL OR cover = ''"), m_db);
+    QList<QPair<qint64, QString>> rows;
+    while (q.next()) rows.append({q.value(0).toLongLong(), q.value(1).toString()});
+
+    int updated = 0;
+    m_db.transaction();
+    for (const auto &row : rows) {
+        const QString cover = findFolderCover(row.second);
+        if (cover.isEmpty()) continue;
+        QSqlQuery up(m_db);
+        up.prepare(QStringLiteral("UPDATE tracks SET cover = :c WHERE id = :id"));
+        up.bindValue(QStringLiteral(":c"), cover);
+        up.bindValue(QStringLiteral(":id"), row.first);
+        if (up.exec()) ++updated;
+    }
+    m_db.commit();
+
+    if (updated > 0) emit tracksChanged();
+    return updated;
 }
 
 void LocalLibrary::finishImport() {
