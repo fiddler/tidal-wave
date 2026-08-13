@@ -345,9 +345,14 @@ Track Player::trackFromMap(const QVariantMap &m) const {
 void Player::loadAndPlay(int index) {
     if (!m_player || index < 0 || index >= m_queue.count()) return;
 
-    setLoading(true);
+    // Order matters: stop() and clearing the source make QMediaPlayer report
+    // LoadedMedia, which onMediaStatusChanged turns back into loading=false.
+    // Raising the flag before them meant the row became the current track with
+    // neither the loading nor the playing state, so next/previous showed
+    // nothing at all until the audio started.
     m_player->stop();
     m_player->setSource(QUrl());
+    setLoading(true);
 
     if (m_activeDownload) {
         auto *dl = m_activeDownload;
@@ -399,7 +404,10 @@ void Player::loadAndPlay(int index) {
             return;
         }
         m_streamedQuality = m_queue[index].value("quality").toString();
-        setLoading(false);
+        // Loading stays true until the media actually plays — see
+        // onMediaStatusChanged/onPlaybackStateChanged. Clearing it here would
+        // leave the row with neither the loading nor the playing state during
+        // the gap between setSource() and the first audio.
         m_player->setSource(QUrl::fromLocalFile(m_currentTrack.localPath));
         m_player->play();
         return;
@@ -422,7 +430,10 @@ void Player::loadAndPlay(int index) {
         m_preloadReady    = false;
         m_preloadQuality  = {};
         emit currentTrackChanged();
-        setLoading(false);
+        // Keep loading true here too. This is the path next/previous normally
+        // takes — the track is already preloaded — so clearing it made the new
+        // row show nothing at all until the audio started, while a double click
+        // (no preload) correctly showed the spinner.
         m_player->setSource(QUrl::fromLocalFile(m_mpdTempFile->fileName()));
         m_player->play();
         return;
@@ -516,6 +527,11 @@ void Player::onMediaStatusChanged(QMediaPlayer::MediaStatus status) {
 }
 
 void Player::onPlaybackStateChanged(QMediaPlayer::PlaybackState state) {
+    // The first audio always ends the loading state, whatever the media status
+    // reported. This is the backstop that keeps a row from holding the spinner
+    // after it has started to play.
+    if (state == QMediaPlayer::PlayingState)
+        setLoading(false);
     emit playingChanged(state == QMediaPlayer::PlayingState);
 }
 
