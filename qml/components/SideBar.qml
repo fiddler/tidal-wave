@@ -65,6 +65,13 @@ Rectangle {
             currentPage: root.currentPage
             onActivated: root.navigate("collection", {})
         }
+        SideNavItem {
+            icon: "music"
+            label: "Local Files"
+            page: "local"
+            currentPage: root.currentPage
+            onActivated: root.navigate("local", {})
+        }
 
         Item { height: 16 }
         Rectangle { color: Theme.border; height: 1; Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16 }
@@ -139,6 +146,102 @@ Rectangle {
                             text: plToolTip.text
                             color: Theme.textPrimary
                             font.pixelSize: 12
+                        }
+                    }
+                }
+            }
+        }
+
+        // ─── Local playlists ───────────────────────────
+        // Kept in their own group: these live only in this app and hold files
+        // from disk, so mixing them into the Tidal list above would imply they
+        // sync to your account, which they never do.
+        Item { height: 12; visible: localPlaylistList.count > 0 }
+        Rectangle {
+            visible: localPlaylistList.count > 0
+            color: Theme.border; height: 1
+            Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16
+        }
+        Item { height: 12; visible: localPlaylistList.count > 0 }
+
+        Text {
+            visible: localPlaylistList.count > 0
+            Layout.leftMargin: 20
+            text: "LOCAL PLAYLISTS"
+            color: Theme.textDim
+            font.pixelSize: 10
+            font.bold: true
+            font.letterSpacing: 1.5
+        }
+
+        Item { height: 8; visible: localPlaylistList.count > 0 }
+
+        ListView {
+            id: localPlaylistList
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(contentHeight, 160)
+            Layout.bottomMargin: 8
+            visible: count > 0
+            clip: true
+            model: ListModel { id: localPlaylistModel }
+
+            function reload() {
+                localPlaylistModel.clear()
+                var pls = library.playlists()
+                for (var i = 0; i < pls.length; i++) localPlaylistModel.append(pls[i])
+            }
+            Component.onCompleted: reload()
+            Connections {
+                target: library
+                function onPlaylistsChanged() { localPlaylistList.reload() }
+            }
+
+            delegate: Item {
+                id: lplDelegate
+                width: ListView.view.width
+                height: 36
+
+                function activate() {
+                    root.navigate("localplaylist", {
+                        localPlaylistId: model.id,
+                        playlistTitle:   model.title
+                    })
+                }
+
+                activeFocusOnTab: true
+                Keys.onReturnPressed: activate()
+                Keys.onSpacePressed:  activate()
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    radius: 6
+                    color: lplHov.hovered ? Theme.surfaceHov : "transparent"
+                    border.width: lplDelegate.activeFocus ? 2 : 0
+                    border.color: Theme.accent
+                    HoverHandler { id: lplHov }
+                    TapHandler { onTapped: lplDelegate.activate() }
+
+                    Row {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 16
+                        anchors.right: parent.right
+                        anchors.rightMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+                        VectorIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            name: "music"; color: Theme.textDim
+                            width: 12; height: 12; strokeWidth: 1.6
+                        }
+                        Text {
+                            id: lplText
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: model.title
+                            color: Theme.textSec
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
+                            width: parent.width - 40
                         }
                     }
                 }

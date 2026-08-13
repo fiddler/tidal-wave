@@ -327,9 +327,10 @@ void Player::buildShuffleOrder() {
 
 Track Player::trackFromMap(const QVariantMap &m) const {
     Track t;
-    t.id       = m["id"].toLongLong();
-    t.title    = m["title"].toString();
-    t.duration = m["duration"].toInt();
+    t.id        = m["id"].toLongLong();
+    t.title     = m["title"].toString();
+    t.duration  = m["duration"].toInt();
+    t.localPath = m["localPath"].toString();
     t.album.title = m["albumTitle"].toString();
     t.album.id    = m["albumId"].toLongLong();
     t.album.cover = m["albumCover"].toString();
@@ -386,6 +387,22 @@ void Player::loadAndPlay(int index) {
         }
         QSettings settings;
         settings.setValue(QStringLiteral("user_%1/playback/recentlyPlayed").arg(uid), saveList);
+    }
+
+    // Local library file — there is no manifest to fetch and nothing to
+    // preload, so hand the path straight to the player.
+    if (m_currentTrack.isLocal()) {
+        cancelPreload();
+        if (casting()) {
+            setLoading(false);
+            emit error(tr("Local files cannot be cast to a remote device."));
+            return;
+        }
+        m_streamedQuality = m_queue[index].value("quality").toString();
+        setLoading(false);
+        m_player->setSource(QUrl::fromLocalFile(m_currentTrack.localPath));
+        m_player->play();
+        return;
     }
 
     // If casting, don't play locally — hand the (already-updated) current track
@@ -530,6 +547,10 @@ void Player::preloadNext() {
     if (next < 0 || next == m_preloadIndex) return;
 
     cancelPreload();
+
+    // Local files open instantly and have no manifest — nothing to preload.
+    if (!m_queue[next].value("localPath").toString().isEmpty()) return;
+
     m_preloadIndex = next;
 
     qlonglong trackId = m_queue[next].value("id").toLongLong();

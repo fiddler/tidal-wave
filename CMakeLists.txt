@@ -38,6 +38,7 @@ set(SOURCES
     src/api/TidalBridge.cpp
     src/player/Player.cpp
     src/player/Downloader.cpp
+    src/library/LocalLibrary.cpp
     src/mpris/MprisPlayer.cpp
     src/ui/Application.cpp
     src/ui/ImageProvider.cpp
@@ -51,6 +52,7 @@ set(HEADERS
     src/api/TidalBridge.h
     src/player/Player.h
     src/player/Downloader.h
+    src/library/LocalLibrary.h
     src/mpris/MprisPlayer.h
     src/ui/Application.h
     src/ui/ImageProvider.h
@@ -125,11 +127,13 @@ qt_add_qml_module(tidal-wave
         qml/pages/MixPage.qml
         qml/pages/NowPlayingPage.qml
         qml/pages/RadioPage.qml
+        qml/pages/LocalPage.qml
+        qml/pages/LocalPlaylistPage.qml
     RESOURCES
         assets/icon.png
 )
 
-target_include_directories(tidal-wave PRIVATE src src/api src/player src/mpris src/ui src/cast)
+target_include_directories(tidal-wave PRIVATE src src/api src/player src/mpris src/ui src/cast src/library)
 
 target_link_libraries(tidal-wave PRIVATE
     Qt6::Core

@@ -12,7 +12,9 @@ TidalImageProvider::TidalImageProvider()
 QQuickImageResponse *TidalImageProvider::requestImageResponse(
     const QString &id, const QSize &requestedSize)
 {
-    QUrl url(id.startsWith("http") ? id : ("https://" + id));
+    // Cover art for local library tracks arrives as a file: URL (QNetworkAccessManager
+    // serves those directly); everything else is a bare Tidal resources host + path.
+    QUrl url(id.startsWith("http") || id.startsWith("file:") ? id : ("https://" + id));
     return new ::ImageResponse(url, requestedSize);
 }
 

@@ -19,7 +19,15 @@ Item {
     property bool   showAlbum: true
     property bool   showCover: true
     property var    trackData: null   // full track map (has albumId, id, etc.)
-    property bool   isLiked: trackData ? bridge.isTrackFavorite(trackData.id) : false
+
+    // Local library tracks have no Tidal id, so every action that talks to
+    // Tidal (download, favourite, radio, album/artist links, share URL) is
+    // hidden for them. Playback and queueing work exactly the same.
+    readonly property bool isLocalTrack: !!(trackData && trackData.localPath)
+
+    property int    localPlaylistId: 0   // >0 when shown inside a local playlist
+
+    property bool   isLiked: (trackData && !trackData.localPath) ? bridge.isTrackFavorite(trackData.id) : false
     // Playlist context: set when TrackRow is inside a PlaylistPage
     property string playlistUuid: ""
     property int    trackItemIndex: -1  // 0-based position in playlist
@@ -31,7 +39,7 @@ Item {
     Connections {
         target: bridge
         function onFavoriteTracksChanged() {
-            root.isLiked = root.trackData ? bridge.isTrackFavorite(root.trackData.id) : false
+            root.isLiked = (root.trackData && !root.trackData.localPath) ? bridge.isTrackFavorite(root.trackData.id) : false
         }
     }
 
@@ -201,7 +209,7 @@ Item {
             // Download button — revealed on hover; stays visible while busy/done/error
             Item {
                 id: dlButton
-                visible: hov.hovered || root.dlState !== "idle"
+                visible: !root.isLocalTrack && (hov.hovered || root.dlState !== "idle")
                 Layout.preferredWidth: 24
                 Layout.fillHeight: true
                 Layout.alignment: Qt.AlignVCenter
@@ -305,6 +313,8 @@ Item {
         }
         MenuItem {
             text: "⬇  Download…"
+            visible: !root.isLocalTrack
+            height: visible ? implicitHeight : 0
             enabled: root.trackData !== null && root.dlState !== "busy"
             contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
@@ -315,22 +325,29 @@ Item {
             enabled: root.trackData !== null
             contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
-            onTriggered: { if (root.trackData) playlistPicker.openFor(root.trackData.id) }
+            onTriggered: {
+                if (!root.trackData) return
+                if (root.isLocalTrack) localPlaylistPicker.openFor(root.trackData.localId)
+                else                   playlistPicker.openFor(root.trackData.id)
+            }
         }
         MenuItem {
             text: "🗑  Remove from playlist"
-            visible: root.playlistUuid.length > 0
+            visible: root.playlistUuid.length > 0 || root.localPlaylistId > 0
             height: visible ? implicitHeight : 0
-            enabled: root.trackData !== null && root.playlistUuid.length > 0
+            enabled: root.trackData !== null && (root.playlistUuid.length > 0 || root.localPlaylistId > 0)
             contentItem: Text { text: parent.text; color: parent.enabled ? Theme.red : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: {
-                if (root.trackData && root.playlistUuid.length > 0 && root.trackItemIndex >= 0)
+                if (root.trackData && root.trackItemIndex >= 0
+                    && (root.playlistUuid.length > 0 || root.localPlaylistId > 0))
                     root.removeFromPlaylistRequested(root.trackItemIndex)
             }
         }
         MenuItem {
             text: "📻  Start radio"
+            visible: !root.isLocalTrack
+            height: visible ? implicitHeight : 0
             enabled: root.trackData !== null
             contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
@@ -344,6 +361,8 @@ Item {
         }
         MenuItem {
             text: root.isLiked ? "♥  Unlike" : "♡  Like"
+            visible: !root.isLocalTrack
+            height: visible ? implicitHeight : 0
             enabled: root.trackData !== null
             contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
@@ -359,6 +378,8 @@ Item {
         MenuSeparator {}
         MenuItem {
             text: "💿  Go to album"
+            visible: !root.isLocalTrack
+            height: visible ? implicitHeight : 0
             enabled: root.trackData && root.trackData.albumId > 0
             contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
@@ -369,6 +390,8 @@ Item {
         }
         MenuItem {
             text: "🎤  Go to artist"
+            visible: !root.isLocalTrack
+            height: visible ? implicitHeight : 0
             enabled: root.trackData && root.trackData.artistId > 0
             contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
@@ -380,6 +403,8 @@ Item {
         MenuSeparator {}
         MenuItem {
             text: "🔗  Copy link"
+            visible: !root.isLocalTrack
+            height: visible ? implicitHeight : 0
             enabled: root.trackData !== null
             contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
@@ -469,6 +494,111 @@ Item {
                                     anchors.fill: parent
                                     source: model.coverUrl ? "image://tidal/" + model.coverUrl : ""
                                     fillMode: Image.PreserveAspectCrop; smooth: true
+                                }
+                            }
+                            Column {
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 1
+                                Text { text: model.title; color: Theme.textPrimary; font.pixelSize: 13 }
+                                Text { text: model.numTracks + " tracks"; color: Theme.textSec; font.pixelSize: 11 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Item { width: parent.width; height: 8 }
+        }
+    }
+
+    // Local-library counterpart of playlistPicker above. Local playlists live
+    // only in this app, so this list never touches the Tidal API.
+    Popup {
+        id: localPlaylistPicker
+        anchors.centerIn: Overlay.overlay
+        width: 340
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 0
+        property var pendingLocalId: 0
+
+        function openFor(localId) {
+            pendingLocalId = localId
+            reload()
+            open()
+        }
+        function reload() {
+            localPickerModel.clear()
+            var pls = library.playlists()
+            for (var i = 0; i < pls.length; i++) localPickerModel.append(pls[i])
+        }
+
+        background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 12 }
+
+        Column {
+            width: parent.width
+
+            Item {
+                width: parent.width
+                height: 52
+                Text {
+                    anchors.left: parent.left; anchors.leftMargin: 16
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Add to local playlist"
+                    color: Theme.textPrimary; font.pixelSize: 15; font.bold: true
+                }
+                VectorIcon {
+                    anchors.right: parent.right; anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "x"; color: Theme.textSec; width: 12; height: 12; strokeWidth: 2
+                    MouseArea { anchors.fill: parent; anchors.margins: -6; onClicked: localPlaylistPicker.close() }
+                }
+            }
+            Rectangle { width: parent.width; height: 1; color: Theme.border }
+
+            Text {
+                visible: localPickerModel.count === 0
+                width: parent.width
+                padding: 16
+                text: "No local playlists yet. Create one on the Local Files page."
+                color: Theme.textSec; font.pixelSize: 13; wrapMode: Text.WordWrap
+            }
+
+            ListView {
+                id: localPickerList
+                width: parent.width
+                height: Math.min(contentHeight, 300)
+                clip: true
+                model: ListModel { id: localPickerModel }
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                delegate: Item {
+                    width: localPickerList.width
+                    height: 44
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 4
+                        radius: 6
+                        color: localPlHov.hovered ? Theme.surfaceHov : "transparent"
+                        HoverHandler { id: localPlHov }
+                        TapHandler {
+                            onTapped: {
+                                library.addToPlaylist(model.id, [localPlaylistPicker.pendingLocalId])
+                                localPlaylistPicker.close()
+                            }
+                        }
+                        Row {
+                            anchors.left: parent.left; anchors.leftMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 10
+                            Rectangle {
+                                width: 28; height: 28; radius: 4
+                                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18)
+                                VectorIcon {
+                                    anchors.centerIn: parent
+                                    name: "music"; color: Theme.accent
+                                    width: 14; height: 14; strokeWidth: 1.6
                                 }
                             }
                             Column {

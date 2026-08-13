@@ -76,6 +76,13 @@ struct Track {
     QString audioQuality;
     Album   album;
     QList<Artist> artists;
+    // Set only for tracks from the local library. When present the player
+    // plays this file directly and never asks Tidal for a stream manifest.
+    // Local tracks carry a negative id so they can never collide with a
+    // Tidal track id or be sent to a Tidal endpoint by mistake.
+    QString localPath;
+
+    bool isLocal() const { return !localPath.isEmpty(); }
 
     static Track fromJson(const QJsonObject &j) {
         Track t;

@@ -6,6 +6,7 @@
 #include "api/TidalBridge.h"
 #include "player/Player.h"
 #include "player/Downloader.h"
+#include "library/LocalLibrary.h"
 #include "mpris/MprisPlayer.h"
 #include "ui/ImageProvider.h"
 #include <QSystemTrayIcon>
@@ -37,6 +38,7 @@ private:
     TidalBridge *m_bridge = nullptr;
     Player      *m_player = nullptr;
     Downloader  *m_downloader = nullptr;
+    LocalLibrary*m_library = nullptr;
     CastManager *m_cast   = nullptr;
     MprisManager*m_mpris  = nullptr;
     QSystemTrayIcon *m_trayIcon = nullptr;

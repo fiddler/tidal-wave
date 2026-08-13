@@ -185,6 +185,7 @@ int Application::run(int argc, char **argv) {
     m_bridge = new TidalBridge(m_client, this);
     m_player = new Player(m_client, this);
     m_downloader = new Downloader(m_client, this);
+    m_library    = new LocalLibrary(this);
 #ifdef Q_OS_LINUX
     // Chromecast output relies on Avahi (Linux mDNS); build/enable only there.
     m_cast = new CastManager(m_client, m_player, this);
@@ -236,6 +237,7 @@ int Application::run(int argc, char **argv) {
     ctx->setContextProperty(QStringLiteral("bridge"), m_bridge);
     ctx->setContextProperty(QStringLiteral("player"), m_player);
     ctx->setContextProperty(QStringLiteral("downloader"), m_downloader);
+    ctx->setContextProperty(QStringLiteral("library"), m_library);
     // `cast` is Linux-only; register it as null elsewhere (m_cast is an
     // incomplete type off-Linux since CastManager.h isn't included there).
     QObject *castObj = nullptr;

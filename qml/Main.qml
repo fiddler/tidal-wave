@@ -196,7 +196,7 @@ ApplicationWindow {
     // action (button, Escape, Alt+Left) makes sense. Top-level destinations
     // (home/search/collection) are reached directly from the sidebar and
     // don't need — or want — a back affordance.
-    readonly property var detailPages: ["album", "artist", "playlist", "mix", "nowplaying", "radio"]
+    readonly property var detailPages: ["album", "artist", "playlist", "mix", "nowplaying", "radio", "localplaylist"]
 
     function navigate(page, params) {
         var p = params || {}
@@ -410,6 +410,8 @@ ApplicationWindow {
                                 case "mix":        return "pages/MixPage.qml"
                                 case "nowplaying": return "pages/NowPlayingPage.qml"
                                 case "radio":      return "pages/RadioPage.qml"
+                                case "local":          return "pages/LocalPage.qml"
+                                case "localplaylist":  return "pages/LocalPlaylistPage.qml"
                                 default:           return ""
                             }
                         }
@@ -447,6 +449,95 @@ ApplicationWindow {
             Layout.fillWidth: true
             onShowQueue:      root.queueOpen = !root.queueOpen
             onShowNowPlaying: root.navigate("nowplaying")
+        }
+    }
+
+    // Window-wide import target: drop audio files or folders anywhere to add
+    // them to the local library. Dropping onto an open local playlist adds them
+    // to that playlist as well.
+    DropArea {
+        id: importDrop
+        anchors.fill: parent
+        enabled: auth.state === 2
+
+        property bool acceptable: false
+
+        onEntered: (drag) => {
+            acceptable = drag.hasUrls && library.hasAudioUrls(drag.urls)
+            if (!acceptable) drag.accepted = false
+        }
+        onExited: acceptable = false
+        onDropped: (drop) => {
+            acceptable = false
+            if (!drop.hasUrls || !library.hasAudioUrls(drop.urls)) {
+                drop.accepted = false
+                return
+            }
+            // Remember where to file the tracks once the import completes.
+            var target = (root.currentPage === "localplaylist" && detailLoader.item
+                          && detailLoader.item.localPlaylistId > 0)
+                         ? detailLoader.item.localPlaylistId : 0
+            importSink.targetPlaylistId = target
+            importSink.armed = true
+            library.importUrls(drop.urls)
+            drop.accept()
+        }
+    }
+
+    // importUrls() is asynchronous, so the "add to the playlist I dropped on"
+    // step waits for the import to finish and then files whatever is new.
+    QtObject {
+        id: importSink
+        property bool armed: false
+        property int  targetPlaylistId: 0
+        property var  before: []
+    }
+
+    Connections {
+        target: library
+        function onImportFinished(added, skipped, failed) {
+            if (!importSink.armed) return
+            importSink.armed = false
+            if (importSink.targetPlaylistId > 0 && added > 0) {
+                // The newest rows are the ones just imported.
+                var all = library.tracks()
+                all.sort(function(a, b) { return b.localId - a.localId })
+                var ids = []
+                for (var i = 0; i < added && i < all.length; i++) ids.push(all[i].localId)
+                ids.reverse()
+                library.addToPlaylist(importSink.targetPlaylistId, ids)
+            }
+            importSink.targetPlaylistId = 0
+        }
+    }
+
+    // Drop hint
+    Rectangle {
+        anchors.fill: parent
+        visible: importDrop.acceptable
+        color: Qt.rgba(0, 0.698, 0.973, 0.12)
+        border.color: Theme.accent
+        border.width: 2
+        radius: 4
+        z: 9999
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: hintText.implicitWidth + 48
+            height: 64
+            radius: 12
+            color: Theme.surfaceHigh
+            border.color: Theme.accent
+            Text {
+                id: hintText
+                anchors.centerIn: parent
+                text: (root.currentPage === "localplaylist")
+                      ? "Drop to add to this playlist"
+                      : "Drop to add to your local library"
+                color: Theme.textPrimary
+                font.pixelSize: 15
+                font.bold: true
+            }
         }
     }
 }
