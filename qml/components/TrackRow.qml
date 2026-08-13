@@ -16,14 +16,18 @@ Item {
     property string durationStr: ""
     property string coverUrl: ""
     property bool   isPlaying: false
+    // True between the click and the first audio: the row shows a subtle
+    // highlight and a spinner instead of the track number, so the click gets
+    // immediate feedback while the stream URL is fetched.
+    property bool   isLoading: false
     property bool   showAlbum: true
     property bool   showCover: true
     property var    trackData: null   // full track map (has albumId, id, etc.)
 
-    // The track the player is on, whether or not it is playing. isPlaying is
-    // false while paused — and after a session restore, where the queue is
-    // back but no stream is loaded — so it cannot mark the row on its own.
-    // Derived here rather than passed in by every page that shows a track.
+    // The track the player is on, whether or not it is playing. isPlaying and
+    // isLoading are both false while paused — and after a session restore,
+    // where the queue is back but no stream is loaded — so neither can mark
+    // the row on its own. Derived here rather than passed in by every page.
     readonly property bool isCurrent: !!(trackData && player.currentTrack
                                          && player.currentTrack.id === trackData.id)
 
@@ -144,11 +148,17 @@ Item {
         anchors.fill: parent
         anchors.margins: 2
         radius: 6
+        // isLoading is tested before isCurrent: the current track is already
+        // set while its stream loads, so the dim "buffering" tint would never
+        // be seen if the brighter one won first.
         color: root.selected ? Qt.rgba(1, 1, 1, 0.13)
+               : isLoading ? Qt.rgba(0, 0.698, 0.973, 0.035)
                : (isPlaying || isCurrent) ? Qt.rgba(0, 0.698, 0.973, 0.08)
                : hov.hovered ? Theme.surfaceHov : "transparent"
         border.width: root.activeFocus ? 2 : 0
         border.color: Theme.accent
+
+        Behavior on color { ColorAnimation { duration: 120 } }
 
         MouseArea {
             id: hov
@@ -195,6 +205,7 @@ Item {
                 if (mouse.button === Qt.LeftButton)
                     root.playRequested()
             }
+
         }
 
         RowLayout {
@@ -207,23 +218,45 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 Text {
                     anchors.centerIn: parent
-                    visible: !isCurrent && !hov.hovered
+                    visible: !isCurrent && !isLoading && !hov.hovered
                     text: root.trackNum
                     color: Theme.textDim
                     font.pixelSize: 13
                 }
                 VectorIcon {
                     anchors.centerIn: parent
-                    visible: isCurrent && !hov.hovered
+                    visible: isCurrent && !isLoading && !hov.hovered
                     name: "music"
                     color: Theme.accent
                     width: 14
                     height: 14
                     strokeWidth: 1.5
                 }
+                // Loading spinner (same idiom as the download spinner). It wins
+                // over the hover glyph: the pointer is still on the row right
+                // after the click, and the spinner is the useful feedback.
+                Item {
+                    id: loadSpinner
+                    anchors.centerIn: parent
+                    width: 14; height: 14
+                    visible: root.isLoading
+                    Rectangle {
+                        width: 3; height: 6; radius: 1.5
+                        anchors.top: parent.top
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        color: Theme.accent
+                    }
+                    RotationAnimator {
+                        target: loadSpinner
+                        from: 0; to: 360
+                        duration: 800
+                        loops: Animation.Infinite
+                        running: root.isLoading
+                    }
+                }
                 Text {
                     anchors.centerIn: parent
-                    visible: hov.hovered
+                    visible: hov.hovered && !isLoading
                     text: isPlaying ? "⏸" : "▶"
                     color: Theme.textPrimary
                     font.pixelSize: 14

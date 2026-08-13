@@ -185,6 +185,7 @@ Rectangle {
                 durationStr: modelData.durationStr
                 coverUrl:    modelData.coverUrl80
                 isPlaying:   player.currentTrack.id === modelData.id && player.playing
+                isLoading:   player.currentTrack.id === modelData.id && player.loading
                 trackData:   modelData
                 onPlayRequested: {
                     player.setPlaybackSource("collection", "tracks", "Liked Songs")

@@ -149,6 +149,7 @@ Rectangle {
                             durationStr:    root.tracks[index].durationStr
                             coverUrl:       root.tracks[index].coverUrl80
                             isPlaying:      player.currentTrack.id === root.tracks[index].id && player.playing
+                            isLoading:      player.currentTrack.id === root.tracks[index].id && player.loading
                             trackData:      root.tracks[index]
                             showPopularity: true
                             onPlayRequested: player.playTracks(root.tracks, index)

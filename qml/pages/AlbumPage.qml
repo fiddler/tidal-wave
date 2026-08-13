@@ -223,6 +223,7 @@ Rectangle {
             showAlbum:   false
             showCover:   false
             isPlaying:   player.currentTrack.id === modelData.id && player.playing
+            isLoading:   player.currentTrack.id === modelData.id && player.loading
             trackData:   modelData
             onPlayRequested: root.playFrom(root.tracks, index)
         }
