@@ -5,6 +5,8 @@
 class TidalClient;
 class QProcess;
 class QNetworkReply;
+class QTemporaryFile;
+class DashFetcher;
 
 // Produces a Chromecast-friendly local audio file for a track (highest quality):
 //  - AAC tiers (LOW/HIGH): the fetched MP4 is served as-is (audio/mp4).
@@ -31,6 +33,7 @@ private:
     TidalClient   *m_client  = nullptr;
     QNetworkReply *m_reply   = nullptr;
     QProcess      *m_ffmpeg  = nullptr;
+    DashFetcher   *m_dash    = nullptr;   // active DASH segment join (lossless)
     QString        m_inputPath;    // temp input (mp4 / mpd)
     QString        m_outputPath;   // temp output (flac)
     qlonglong      m_trackId  = 0;

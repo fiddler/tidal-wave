@@ -1,6 +1,7 @@
 #include "CastMediaPrep.h"
 #include "api/TidalClient.h"
 #include "api/Models.h"
+#include "player/DashFetcher.h"
 
 #include <QProcess>
 #include <QNetworkReply>
@@ -19,6 +20,7 @@ CastMediaPrep::~CastMediaPrep() {
 void CastMediaPrep::cancel() {
     ++m_gen;
     if (m_reply) { m_reply->abort(); m_reply = nullptr; }
+    if (m_dash)  { m_dash->abort(); m_dash->deleteLater(); m_dash = nullptr; }
     if (m_ffmpeg) { m_ffmpeg->kill(); m_ffmpeg->deleteLater(); m_ffmpeg = nullptr; }
     cleanupInput();
     if (!m_outputPath.isEmpty()) { QFile::remove(m_outputPath); m_outputPath.clear(); }
@@ -65,13 +67,37 @@ void CastMediaPrep::prepare(qlonglong trackId) {
                         }
                     });
             } else {
-                // MPD: write the DASH XML to a temp file; ffmpeg pulls the segments.
-                QTemporaryFile tmp(QDir::tempPath() + QStringLiteral("/tidal-wave-cast-XXXXXX.mpd"));
-                tmp.setAutoRemove(false);
-                if (!tmp.open()) { emit failed(QStringLiteral("Temp file error")); return; }
-                tmp.write(manifest.url.toUtf8()); tmp.flush(); tmp.close();
-                m_inputPath = tmp.fileName();
-                remuxFlac(/*isMpd=*/true, sr);
+                // DASH. Handing the manifest to ffmpeg only works where
+                // libavformat was built with libxml2; without it there is no
+                // DASH demuxer and every lossless cast fails with "Invalid data
+                // found". Joining the segments first gives ffmpeg an ordinary
+                // fragmented MP4, which every build reads.
+                const quint64 gen = m_gen;
+                auto *fetcher = new DashFetcher(m_client, manifest.url, this);
+                if (!fetcher->isValid()) {
+                    delete fetcher;
+                    emit failed(QStringLiteral("Could not read the lossless stream manifest"));
+                    return;
+                }
+                m_dash = fetcher;
+                connect(fetcher, &DashFetcher::finished, this,
+                    [this, fetcher, gen, sr](QTemporaryFile *file, const QString &err) {
+                        if (m_dash == fetcher) m_dash = nullptr;
+                        fetcher->deleteLater();
+                        if (gen != m_gen) {                 // superseded or cancelled
+                            if (file) { file->remove(); delete file; }
+                            return;
+                        }
+                        if (!file) {
+                            emit failed(QStringLiteral("Failed to download audio: ") + err);
+                            return;
+                        }
+                        m_inputPath = file->fileName();
+                        file->setAutoRemove(false);
+                        delete file;                        // keep the bytes, drop the handle
+                        remuxFlac(/*isMpd=*/false, sr);
+                    });
+                fetcher->start();
             }
         });
 }
