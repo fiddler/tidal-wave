@@ -36,6 +36,9 @@ Item {
     // hidden for them. Playback and queueing work exactly the same.
     readonly property bool isLocalTrack: !!(trackData && trackData.localPath)
 
+    // Tidal still lists tracks whose rights expired, but refuses to stream
+    // them. They are shown greyed out and cannot be played or queued.
+    readonly property bool isUnavailable: !!(trackData && trackData.available === false)
     property int    localPlaylistId: 0   // >0 when shown inside a local playlist
 
     // Selection + drag. `selection` is the page's TrackSelection object and
@@ -134,8 +137,8 @@ Item {
     signal removeFromPlaylistRequested(int itemIndex)
 
     activeFocusOnTab: true
-    Keys.onReturnPressed: root.playRequested()
-    Keys.onSpacePressed:  root.playRequested()
+    Keys.onReturnPressed: { if (!root.isUnavailable) root.playRequested() }
+    Keys.onSpacePressed:  { if (!root.isUnavailable) root.playRequested() }
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Menu || (event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
             root.menuRequested(width / 2, height / 2)
@@ -165,7 +168,7 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             acceptedButtons: Qt.LeftButton | Qt.RightButton
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: root.isUnavailable ? Qt.ArrowCursor : Qt.PointingHandCursor
             readonly property bool hovered: containsMouse
 
             drag.target: root.selection ? root.dragProxy : null
@@ -198,14 +201,17 @@ Item {
                 }
                 if (root.didDrag) return                  // the press became a drag
                 if (root.selection) root.selection.handleClick(root.rowIndex, mouse.modifiers)
-                else root.playRequested()
+                else if (!root.isUnavailable) root.playRequested()
             }
 
             onDoubleClicked: (mouse) => {
-                if (mouse.button === Qt.LeftButton)
+                if (mouse.button === Qt.LeftButton && !root.isUnavailable)
                     root.playRequested()
             }
 
+            ToolTip.visible: root.isUnavailable && containsMouse
+            ToolTip.text: "No longer available on Tidal"
+            ToolTip.delay: 500
         }
 
         RowLayout {
@@ -218,7 +224,7 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 Text {
                     anchors.centerIn: parent
-                    visible: !isCurrent && !isLoading && !hov.hovered
+                    visible: !isCurrent && !isLoading && (!hov.hovered || root.isUnavailable)
                     text: root.trackNum
                     color: Theme.textDim
                     font.pixelSize: 13
@@ -256,7 +262,7 @@ Item {
                 }
                 Text {
                     anchors.centerIn: parent
-                    visible: hov.hovered && !isLoading
+                    visible: hov.hovered && !isLoading && !root.isUnavailable
                     text: isPlaying ? "⏸" : "▶"
                     color: Theme.textPrimary
                     font.pixelSize: 14
@@ -269,6 +275,7 @@ Item {
                 width: 36; height: 36; radius: 4
                 color: Theme.surfaceHigh
                 clip: true
+                opacity: root.isUnavailable ? 0.35 : 1.0
                 Image {
                     anchors.fill: parent
                     source: coverUrl.length > 0 ? "image://tidal/" + coverUrl : ""
@@ -285,14 +292,15 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     text: root.title
-                    color: (isPlaying || isCurrent) ? Theme.accent : Theme.textPrimary
+                    color: root.isUnavailable ? Theme.textDim
+                           : (isPlaying || isCurrent) ? Theme.accent : Theme.textPrimary
                     font.pixelSize: 14
                     elide: Text.ElideRight
                 }
                 Text {
                     Layout.fillWidth: true
                     text: root.artists
-                    color: Theme.textSec
+                    color: root.isUnavailable ? Theme.textDim : Theme.textSec
                     font.pixelSize: 12
                     elide: Text.ElideRight
                 }
@@ -303,7 +311,7 @@ Item {
                 visible: showAlbum
                 Layout.preferredWidth: 160
                 text: root.albumTitle
-                color: Theme.textSec
+                color: root.isUnavailable ? Theme.textDim : Theme.textSec
                 font.pixelSize: 13
                 elide: Text.ElideRight
             }
@@ -335,7 +343,7 @@ Item {
             // Download button — revealed on hover; stays visible while busy/done/error
             Item {
                 id: dlButton
-                visible: !root.isLocalTrack && (hov.hovered || root.dlState !== "idle")
+                visible: !root.isLocalTrack && !root.isUnavailable && (hov.hovered || root.dlState !== "idle")
                 Layout.preferredWidth: 24
                 Layout.fillHeight: true
                 Layout.alignment: Qt.AlignVCenter
@@ -425,21 +433,35 @@ Item {
         id: contextMenu
         background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 8; implicitWidth: 200 }
 
+        // Shown in place of the playback items when Tidal no longer streams
+        // the track, so the reason is visible where the user looks for it.
+        MenuItem {
+            text: "⃠  Not available on Tidal"
+            visible: root.isUnavailable
+            height: visible ? implicitHeight : 0
+            enabled: false
+            contentItem: Text { text: parent.text; color: Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
+            background: Rectangle { color: "transparent" }
+        }
         MenuItem {
             text: "▶  Play now"
+            visible: !root.isUnavailable
+            height: visible ? implicitHeight : 0
             contentItem: Text { text: parent.text; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: root.playRequested()
         }
         MenuItem {
             text: "+  Add to queue"
+            visible: !root.isUnavailable
+            height: visible ? implicitHeight : 0
             contentItem: Text { text: parent.text; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: { if (root.trackData) player.appendQueue([root.trackData]) }
         }
         MenuItem {
             text: "⬇  Download…"
-            visible: !root.isLocalTrack
+            visible: !root.isLocalTrack && !root.isUnavailable
             height: visible ? implicitHeight : 0
             enabled: root.trackData !== null && root.dlState !== "busy"
             contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }

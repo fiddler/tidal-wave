@@ -74,6 +74,9 @@ struct Track {
     bool    explicit_  = false;
     int     popularity  = 0;
     QString audioQuality;
+    // False for tracks Tidal still lists but no longer streams (rights expired
+    // or region-locked). Such tracks are shown greyed out and are never queued.
+    bool    available = true;
     Album   album;
     QList<Artist> artists;
     // Set only for tracks from the local library. When present the player
@@ -94,6 +97,9 @@ struct Track {
         t.explicit_    = j["explicit"].toBool();
         t.popularity   = j["popularity"].toInt();
         t.audioQuality = j["audioQuality"].toString();
+        // Both flags default to true: a few endpoints omit them, and an absent
+        // flag must not grey out a track that plays perfectly well.
+        t.available    = j["allowStreaming"].toBool(true) && j["streamReady"].toBool(true);
         if (j.contains("album"))
             t.album    = Album::fromJson(j["album"].toObject());
         for (const auto &v : j["artists"].toArray())

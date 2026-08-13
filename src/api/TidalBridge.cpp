@@ -80,6 +80,7 @@ QVariantMap TidalBridge::trackToMap(const Track &t) {
     m["explicit_"]   = t.explicit_;
     m["quality"]     = t.audioQuality;
     m["popularity"]  = t.popularity;
+    m["available"]   = t.available;
     // pre-computed display
     int s = t.duration % 60, mm = t.duration / 60;
     m["durationStr"] = QString("%1:%2").arg(mm).arg(s, 2, 10, QChar('0'));

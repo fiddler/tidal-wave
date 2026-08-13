@@ -141,6 +141,7 @@ QVariantMap LocalLibrary::rowToMap(const QSqlQuery &q) const {
     m[QStringLiteral("explicit_")]   = false;
     m[QStringLiteral("quality")]     = q.value(QStringLiteral("codec")).toString().toUpper();
     m[QStringLiteral("popularity")]  = 0;
+    m[QStringLiteral("available")]   = true;   // a local file is always playable
     m[QStringLiteral("isLocal")]     = true;
     return m;
 }

@@ -391,6 +391,28 @@ void Player::loadAndPlay(int index, qint64 startMs) {
     m_pendingSeekMs     = qMax(0LL, startMs);
     m_lastSavedPosition = m_pendingSeekMs;
 
+    // Tidal keeps retired tracks in playlists but refuses to stream them. The
+    // UI greys them out, so this only fires on "Play all", shuffle, or an
+    // auto-advance: step past them instead of stalling on a stream error.
+    // The counter bounds the walk when every remaining track is unavailable.
+    if (!m_queue[index].value(QStringLiteral("available"), true).toBool()) {
+        for (int guard = m_queue.count(); guard > 0; --guard) {
+            m_index = index;
+            int n = nextIndex();
+            if (n < 0 || n == index) break;
+            index = n;
+            if (m_queue[index].value(QStringLiteral("available"), true).toBool()) break;
+        }
+        if (!m_queue[index].value(QStringLiteral("available"), true).toBool()) {
+            m_player->stop();
+            setLoading(false);
+            emit error(tr("This track is no longer available on Tidal."));
+            return;
+        }
+        m_index = index;
+        emit queueChanged();
+    }
+
     // Order matters: stop() and clearing the source make QMediaPlayer report
     // LoadedMedia, which onMediaStatusChanged turns back into loading=false.
     // Raising the flag before them meant the row became the current track with
