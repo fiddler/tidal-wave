@@ -240,6 +240,10 @@ ApplicationWindow {
         } else {
             focusStealer.forceActiveFocus()
         }
+        // Remember where we are, with one step of back history, so the next
+        // start returns here. Cheap enough to do on every navigation.
+        app.saveNavState(page, JSON.stringify(p),
+                         previousPage, JSON.stringify(previousPageParams))
     }
 
     // The TrackSelection of whichever page is showing, or null if that page has
@@ -254,11 +258,41 @@ ApplicationWindow {
         navigate(previousPage, previousPageParams)
     }
 
+    // Returns to the page that was open when the app last closed, so a restart
+    // lands where it left off instead of always on Home. The saved page may no
+    // longer be a real one after an update, so an unknown name falls back home.
+    function restoreNavState() {
+        // Read the whole stored state first. navigate() saves as it goes, so
+        // reading the back target after it would return what this session just
+        // wrote instead of what the last session left.
+        var page       = app.lastNavPage()
+        var paramsJson = app.lastNavParams()
+        var prev       = app.lastNavPrevPage()
+        var prevJson   = app.lastNavPrevParams()
+
+        if (!page || !getLoader(page)) { navigate("home"); return }
+
+        var params = {}
+        try { params = JSON.parse(paramsJson || "{}") } catch (e) { params = {} }
+        navigate(page, params)
+
+        // Put the stored back target in place of the one navigate() computed
+        // from this session's empty history, then write it back, or the back
+        // button on the restored page goes nowhere.
+        if (prev && getLoader(prev)) {
+            previousPage = prev
+            try { previousPageParams = JSON.parse(prevJson || "{}") }
+            catch (e) { previousPageParams = {} }
+            app.saveNavState(page, JSON.stringify(params),
+                             previousPage, JSON.stringify(previousPageParams))
+        }
+    }
+
     Connections {
         target: auth
         function onStateChanged(state) {
             if (state === 2) {
-                root.navigate("home")
+                root.restoreNavState()
             }
         }
     }

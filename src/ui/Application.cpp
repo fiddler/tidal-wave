@@ -24,6 +24,7 @@
 #include <QMenu>
 #include <QAction>
 #include <QQuickStyle>
+#include <QSettings>
 
 typedef int (*snd_lib_error_handler_t)(const char *file, int line, const char *function, int err, const char *fmt, ...);
 typedef int (*snd_lib_error_set_handler_t)(snd_lib_error_handler_t handler);
@@ -269,6 +270,33 @@ int Application::run(int argc, char **argv) {
 }
 
 
+
+// The key that holds the last viewed page for one user.
+static QString navKey(qint64 uid, const QString &field) {
+    return QStringLiteral("user_%1/ui/%2").arg(uid).arg(field);
+}
+
+void Application::saveNavState(const QString &page,     const QString &paramsJson,
+                               const QString &prevPage, const QString &prevParamsJson) {
+    const qint64 uid = m_client ? m_client->userId() : 0;
+    if (uid <= 0 || page.isEmpty()) return;
+    QSettings settings;
+    settings.setValue(navKey(uid, QStringLiteral("lastPage")),           page);
+    settings.setValue(navKey(uid, QStringLiteral("lastPageParams")),     paramsJson);
+    settings.setValue(navKey(uid, QStringLiteral("lastPrevPage")),       prevPage);
+    settings.setValue(navKey(uid, QStringLiteral("lastPrevPageParams")), prevParamsJson);
+}
+
+QString Application::readNav(const QString &field) const {
+    const qint64 uid = m_client ? m_client->userId() : 0;
+    if (uid <= 0) return {};
+    return QSettings().value(navKey(uid, field)).toString();
+}
+
+QString Application::lastNavPage()       const { return readNav(QStringLiteral("lastPage")); }
+QString Application::lastNavParams()     const { return readNav(QStringLiteral("lastPageParams")); }
+QString Application::lastNavPrevPage()   const { return readNav(QStringLiteral("lastPrevPage")); }
+QString Application::lastNavPrevParams() const { return readNav(QStringLiteral("lastPrevPageParams")); }
 
 void Application::quit() {
     m_reallyQuit = true;
