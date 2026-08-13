@@ -24,12 +24,13 @@ Rectangle {
         Row {
             Layout.leftMargin: 20
             spacing: 8
-            Rectangle {
+            Image {
                 width: 28
                 height: 28
-                radius: 4
-                color: Theme.accent
-                Text { anchors.centerIn: parent; text: "≋"; color: "white"; font.pixelSize: 16; font.bold: true }
+                source: "../../assets/icon.png"
+                sourceSize: Qt.size(112, 112)   // oversample so it stays sharp on retina
+                smooth: true
+                mipmap: true
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter

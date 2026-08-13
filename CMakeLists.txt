@@ -152,13 +152,31 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(tidal-wave PRIVATE PkgConfig::AVAHI)
 endif()
 
+# Bundle icon (macOS). The .icns follows Apple's icon grid — 824x824 of
+# artwork centred on a 1024x1024 canvas — so the app matches the size of
+# every other icon in the Dock and the cmd-tab switcher.
+if(APPLE)
+    set(APP_ICNS ${CMAKE_CURRENT_SOURCE_DIR}/assets/tidal-wave.icns)
+    target_sources(tidal-wave PRIVATE ${APP_ICNS})
+    set_source_files_properties(${APP_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+endif()
+
 set_target_properties(tidal-wave PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER com.tidalwave.client
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    MACOSX_BUNDLE_ICON_FILE tidal-wave.icns
+    MACOSX_BUNDLE_BUNDLE_NAME "Tidal Wave"
     MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
 )
+
+# macOS shows the bundle's file name in Finder, the Dock and cmd-tab, so the
+# bundle itself must be "Tidal Wave.app". The Linux/Windows binary keeps the
+# tidal-wave name, which is what the .desktop entry and packaging expect.
+if(APPLE)
+    set_target_properties(tidal-wave PROPERTIES OUTPUT_NAME "Tidal Wave")
+endif()
 
 include(GNUInstallDirs)
 

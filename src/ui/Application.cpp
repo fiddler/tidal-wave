@@ -139,7 +139,13 @@ int Application::run(int argc, char **argv) {
 
     QApplication::setQuitOnLastWindowClosed(false);
     const QIcon appIcon = loadAppIcon();
+#ifndef Q_OS_MACOS
+    // On macOS this would overwrite the Dock/cmd-tab icon with the edge-to-edge
+    // resource pixmap, which then renders larger than every other app icon.
+    // The bundled .icns already carries the correctly inset artwork there.
+    // appIcon is still used for the tray icon below on all platforms.
     QApplication::setWindowIcon(appIcon);
+#endif
 
     // Single-instance check
     QString socketName = QStringLiteral("TidalWaveSingleInstanceSocket");
