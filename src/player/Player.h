@@ -1,7 +1,6 @@
 #pragma once
 #include <QObject>
-#include <QMediaPlayer>
-#include <QAudioOutput>
+#include "MpvAudio.h"
 #include <QVariantMap>
 #include <QVariantList>
 #include <QTemporaryFile>
@@ -128,9 +127,9 @@ signals:
 
 private slots:
     void initAudio();
-    void onMediaStatusChanged(QMediaPlayer::MediaStatus status);
-    void onPlaybackStateChanged(QMediaPlayer::PlaybackState state);
-    void onErrorOccurred(QMediaPlayer::Error error, const QString &msg);
+    void onMediaStatusChanged(MpvAudio::Status status);
+    void onPlaybackStateChanged(MpvAudio::State state);
+    void onErrorOccurred(const QString &msg);
 
 private:
     void handleUserIdChanged(qint64 uid);
@@ -147,8 +146,10 @@ private:
     void cancelPreload();
 
     TidalClient         *m_client;
-    QMediaPlayer        *m_player    = nullptr;
-    QAudioOutput        *m_audioOut  = nullptr;
+    // Volume and mute live on the backend now; QAudioOutput is gone with
+    // QMediaPlayer. m_pendingVolume/m_pendingMuted still hold the values until
+    // initAudio() runs, exactly as before.
+    MpvAudio            *m_player    = nullptr;
     double               m_pendingVolume = 0.7;
     bool                 m_pendingMuted  = false;
 

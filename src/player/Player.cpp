@@ -6,6 +6,7 @@
 #include <QSettings>
 #include <QDir>
 #include "cast/CastSession.h"
+#include "MpvAudio.h"
 #include <algorithm>
 #include <numeric>
 #include <QRandomGenerator>
@@ -24,19 +25,21 @@ Player::Player(TidalClient *client, QObject *parent)
 }
 
 void Player::initAudio() {
-    m_player   = new QMediaPlayer(this);
-    m_audioOut = new QAudioOutput(this);
-    m_player->setAudioOutput(m_audioOut);
-    m_audioOut->setVolume(m_pendingVolume);
-    m_audioOut->setMuted(m_pendingMuted);
+    m_player = new MpvAudio(this);
+    if (!m_player->isValid()) {
+        emit error(tr("Could not start the audio backend (libmpv)."));
+        return;
+    }
+    m_player->setVolume(m_pendingVolume);
+    m_player->setMuted(m_pendingMuted);
 
-    connect(m_player, &QMediaPlayer::mediaStatusChanged,
+    connect(m_player, &MpvAudio::mediaStatusChanged,
             this, &Player::onMediaStatusChanged);
-    connect(m_player, &QMediaPlayer::playbackStateChanged,
+    connect(m_player, &MpvAudio::playbackStateChanged,
             this, &Player::onPlaybackStateChanged);
-    connect(m_player, &QMediaPlayer::errorOccurred,
+    connect(m_player, &MpvAudio::errorOccurred,
             this, &Player::onErrorOccurred);
-    connect(m_player, &QMediaPlayer::positionChanged, this, [this](qint64 pos) {
+    connect(m_player, &MpvAudio::positionChanged, this, [this](qint64 pos) {
         qint64 dur = m_player->duration();
         if (dur > 10000 && pos > 0 && (dur - pos) <= 10000)
             preloadNext();
@@ -48,7 +51,7 @@ void Player::initAudio() {
         }
         emit positionChanged(pos);
     });
-    connect(m_player, &QMediaPlayer::durationChanged,
+    connect(m_player, &MpvAudio::durationChanged,
             this, &Player::durationChanged);
 }
 
@@ -57,7 +60,7 @@ Player::~Player() {
     delete m_mpdTempFile;
 }
 
-bool   Player::playing()  const { return casting() ? m_castPlaying  : (m_player && m_player->playbackState() == QMediaPlayer::PlayingState); }
+bool   Player::playing()  const { return casting() ? m_castPlaying  : (m_player && m_player->playbackState() == MpvAudio::State::Playing); }
 
 qint64 Player::position() const {
     if (casting()) return m_castPosition;
@@ -75,8 +78,8 @@ qint64 Player::duration() const {
     // Before the media loads, the queue entry carries the length in seconds.
     return currentTrackMap().value(QStringLiteral("duration")).toLongLong() * 1000LL;
 }
-double Player::volume()   const { return m_audioOut ? m_audioOut->volume() : m_pendingVolume; }
-bool   Player::muted()    const { return m_audioOut ? m_audioOut->isMuted() : m_pendingMuted; }
+double Player::volume()   const { return m_player ? m_player->volume()  : m_pendingVolume; }
+bool   Player::muted()    const { return m_player ? m_player->isMuted() : m_pendingMuted; }
 
 QVariantMap Player::currentTrackMap() const {
     if (m_index < 0 || m_index >= m_queue.count()) return {};
@@ -252,7 +255,7 @@ void Player::playPause() {
         loadAndPlay(m_index, m_pendingSeekMs);
         return;
     }
-    if (m_player->playbackState() == QMediaPlayer::PlayingState)
+    if (m_player->playbackState() == MpvAudio::State::Playing)
         m_player->pause();
     else
         m_player->play();
@@ -301,7 +304,7 @@ void Player::setVolume(double v) {
 #ifdef Q_OS_LINUX
     if (casting() && m_castSession) m_castSession->setVolume(m_pendingVolume);
 #endif
-    if (m_audioOut) m_audioOut->setVolume(m_pendingVolume);
+    if (m_player) m_player->setVolume(m_pendingVolume);
     emit volumeChanged(m_pendingVolume);
 }
 
@@ -309,7 +312,7 @@ void Player::setMuted(bool m) {
     m_pendingMuted = m;
     // While casting the local output is force-muted; don't override that here
     // (the preference is re-applied on endCast). Mute still updates the UI state.
-    if (m_audioOut && !casting()) m_audioOut->setMuted(m);
+    if (m_player && !casting()) m_player->setMuted(m);
     emit mutedChanged(m);
 }
 
@@ -578,13 +581,12 @@ void Player::loadAndPlay(int index, qint64 startMs) {
         });
 }
 
-void Player::onMediaStatusChanged(QMediaPlayer::MediaStatus status) {
+void Player::onMediaStatusChanged(MpvAudio::Status status) {
     switch (status) {
-    case QMediaPlayer::LoadingMedia:
-    case QMediaPlayer::BufferingMedia:
+    case MpvAudio::Status::Loading:
         setLoading(true); break;
-    case QMediaPlayer::BufferedMedia:
-    case QMediaPlayer::LoadedMedia:
+    case MpvAudio::Status::Buffered:
+    case MpvAudio::Status::Loaded:
         // The media is ready, so a restored offset can finally be applied.
         // Clear it first: position() must report the player from now on.
         if (m_pendingSeekMs > 0) {
@@ -593,11 +595,11 @@ void Player::onMediaStatusChanged(QMediaPlayer::MediaStatus status) {
             m_player->setPosition(target);
         }
         setLoading(false); break;
-    case QMediaPlayer::EndOfMedia:
+    case MpvAudio::Status::EndOfMedia:
         setLoading(false);
         next();
         break;
-    case QMediaPlayer::InvalidMedia:
+    case MpvAudio::Status::InvalidMedia:
         setLoading(false);
         emit error("Invalid media");
         break;
@@ -605,16 +607,16 @@ void Player::onMediaStatusChanged(QMediaPlayer::MediaStatus status) {
     }
 }
 
-void Player::onPlaybackStateChanged(QMediaPlayer::PlaybackState state) {
+void Player::onPlaybackStateChanged(MpvAudio::State state) {
     // The first audio always ends the loading state, whatever the media status
     // reported. This is the backstop that keeps a row from holding the spinner
     // after it has started to play.
-    if (state == QMediaPlayer::PlayingState)
+    if (state == MpvAudio::State::Playing)
         setLoading(false);
-    emit playingChanged(state == QMediaPlayer::PlayingState);
+    emit playingChanged(state == MpvAudio::State::Playing);
 }
 
-void Player::onErrorOccurred(QMediaPlayer::Error, const QString &msg) {
+void Player::onErrorOccurred(const QString &msg) {
     setLoading(false);
     qWarning() << "Player error:" << msg;
     emit error(msg);
@@ -727,7 +729,7 @@ void Player::beginCast(CastSession *session) {
     // (not just pausing) is a hard guard: any in-flight stream fetch that resolves
     // after this point must not leak audio to the local speakers alongside the cast.
     if (m_player) m_player->pause();
-    if (m_audioOut) m_audioOut->setMuted(true);
+    if (m_player) m_player->setMuted(true);
     cancelPreload();
     m_castPosition = 0;
     m_castDuration = duration();   // seed from current until the device reports
@@ -741,7 +743,7 @@ void Player::endCast() {
     m_castPosition = 0;
     m_castPlaying  = false;
     // Restore the user's local mute preference (beginCast force-muted the output).
-    if (m_audioOut) m_audioOut->setMuted(m_pendingMuted);
+    if (m_player) m_player->setMuted(m_pendingMuted);
     // Resume playback locally from the top of the current track.
     if (m_index >= 0 && m_index < m_queue.count())
         loadAndPlay(m_index);

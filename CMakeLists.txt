@@ -16,7 +16,6 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS
     QmlModels
     Network
     DBus
-    Multimedia
     Sql
     Svg
     Concurrent
@@ -29,9 +28,15 @@ if(APPLE)
     enable_language(OBJCXX)
 endif()
 
+find_package(PkgConfig REQUIRED)
+
+# libmpv is the audio backend. Qt Multimedia's platform backends decide what is
+# playable per OS — AVFoundation cannot read a DASH manifest at all — so the
+# decoding stack is owned by the app instead of the platform.
+pkg_check_modules(MPV REQUIRED IMPORTED_TARGET mpv)
+
 # Chromecast support (Linux only) needs Avahi for mDNS discovery.
 if(UNIX AND NOT APPLE)
-    find_package(PkgConfig REQUIRED)
     pkg_check_modules(AVAHI REQUIRED IMPORTED_TARGET avahi-client)
 endif()
 
@@ -42,6 +47,7 @@ set(SOURCES
     src/api/TidalClient.cpp
     src/api/TidalBridge.cpp
     src/player/Player.cpp
+    src/player/MpvAudio.cpp
     src/player/Downloader.cpp
     src/library/LocalLibrary.cpp
     src/mpris/MprisPlayer.cpp
@@ -56,6 +62,7 @@ set(HEADERS
     src/api/TidalClient.h
     src/api/TidalBridge.h
     src/player/Player.h
+    src/player/MpvAudio.h
     src/player/Downloader.h
     src/library/LocalLibrary.h
     src/mpris/MprisPlayer.h
@@ -166,10 +173,10 @@ target_link_libraries(tidal-wave PRIVATE
     Qt6::QmlModels
     Qt6::Network
     Qt6::DBus
-    Qt6::Multimedia
     Qt6::Sql
     Qt6::Svg
     Qt6::Concurrent
+    PkgConfig::MPV
 )
 
 # Avahi for Chromecast discovery (Linux only).
@@ -251,7 +258,7 @@ if(UNIX AND NOT APPLE)
     set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
     set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
     set(CPACK_DEBIAN_PACKAGE_DEPENDS
-        "libqt6core6, libqt6gui6, libqt6widgets6, libqt6quick6, libqt6qml6, libqt6network6, libqt6dbus6, libqt6multimedia6, libqt6sql6, libqt6svg6, libqt6sql6-sqlite, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window, qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, libasound2, libavahi-client3")
+        "libqt6core6, libqt6gui6, libqt6widgets6, libqt6quick6, libqt6qml6, libqt6network6, libqt6dbus6, libqt6sql6, libqt6svg6, libqt6sql6-sqlite, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window, qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, libasound2, libavahi-client3")
     set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "ffmpeg")
     # Let dpkg-shlibdeps refine the library deps automatically where possible.
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
