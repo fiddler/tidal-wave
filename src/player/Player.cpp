@@ -35,6 +35,8 @@ void Player::initAudio() {
     }
     m_player->setVolume(m_pendingVolume);
     m_player->setMuted(m_pendingMuted);
+    if (!m_audioFilter.isEmpty())
+        m_player->setAudioFilter(m_audioFilter);
 
     connect(m_player, &MpvAudio::mediaStatusChanged,
             this, &Player::onMediaStatusChanged);
@@ -56,6 +58,11 @@ void Player::initAudio() {
     });
     connect(m_player, &MpvAudio::durationChanged,
             this, &Player::durationChanged);
+}
+
+void Player::setAudioFilter(const QString &af) {
+    m_audioFilter = af;
+    if (m_player) m_player->setAudioFilter(af);
 }
 
 Player::~Player() {

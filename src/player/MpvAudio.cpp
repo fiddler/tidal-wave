@@ -159,6 +159,15 @@ void MpvAudio::setMuted(bool m) {
     mpv_set_property(m_mpv, "mute", MPV_FORMAT_FLAG, &flag);
 }
 
+void MpvAudio::setAudioFilter(const QString &af) {
+    if (!m_mpv) return;
+    const int rc = mpv_set_property_string(m_mpv, "af", af.toUtf8().constData());
+    // A rejected string leaves the previous chain in place — playback is never
+    // at risk, so a warning is all this needs.
+    if (rc < 0)
+        qWarning() << "[mpv] set af failed:" << mpv_error_string(rc) << af;
+}
+
 void MpvAudio::setState(State s) {
     if (m_state == s) return;
     m_state = s;

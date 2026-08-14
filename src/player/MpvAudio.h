@@ -51,6 +51,12 @@ public:
     bool   isMuted() const { return m_muted; }
     void   setMuted(bool m);
 
+    // Replaces the whole audio filter chain (mpv "af" property). The string is
+    // mpv af syntax, e.g. "@eq:lavfi=[equalizer=...]"; empty clears the chain.
+    // mpv swaps filters mid-playback without a dropout, and the property
+    // sticks across loadfile calls, so one set covers all future tracks.
+    void   setAudioFilter(const QString &af);
+
 signals:
     void mediaStatusChanged(Status status);
     void playbackStateChanged(State state);

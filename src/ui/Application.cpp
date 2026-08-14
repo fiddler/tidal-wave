@@ -194,6 +194,8 @@ int Application::run(int argc, char **argv) {
     connect(qApp, &QCoreApplication::aboutToQuit, m_player, [this]() {
         m_player->saveSession();
     });
+    // After Player: the ctor pushes the persisted EQ curve through it.
+    m_equalizer = new Equalizer(m_player, this);
     m_downloader = new Downloader(m_client, this);
     m_library    = new LocalLibrary(this);
     m_offline    = new OfflineManager(m_client, this);
@@ -254,6 +256,7 @@ int Application::run(int argc, char **argv) {
     ctx->setContextProperty(QStringLiteral("auth"),   m_auth);
     ctx->setContextProperty(QStringLiteral("bridge"), m_bridge);
     ctx->setContextProperty(QStringLiteral("player"), m_player);
+    ctx->setContextProperty(QStringLiteral("equalizer"), m_equalizer);
     ctx->setContextProperty(QStringLiteral("downloader"), m_downloader);
     ctx->setContextProperty(QStringLiteral("library"), m_library);
     ctx->setContextProperty(QStringLiteral("offline"), m_offline);

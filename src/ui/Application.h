@@ -5,6 +5,7 @@
 #include "api/TidalClient.h"
 #include "api/TidalBridge.h"
 #include "player/Player.h"
+#include "player/Equalizer.h"
 #include "player/Downloader.h"
 #include "library/LocalLibrary.h"
 #include "library/OfflineManager.h"
@@ -57,6 +58,7 @@ private:
     TidalClient *m_client = nullptr;
     TidalBridge *m_bridge = nullptr;
     Player      *m_player = nullptr;
+    Equalizer   *m_equalizer = nullptr;
     Downloader  *m_downloader = nullptr;
     LocalLibrary*m_library = nullptr;
     OfflineManager *m_offline = nullptr;

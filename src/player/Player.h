@@ -73,6 +73,11 @@ public:
     // disk instead of streaming. Wired up by Application.
     void setOfflineStore(OfflineManager *offline) { m_offline = offline; }
 
+    // Audio filter chain for the mpv backend (Equalizer is the only caller).
+    // Audio init is deferred, so the string is held and applied in initAudio()
+    // when it arrives early — same pattern as m_pendingVolume.
+    void setAudioFilter(const QString &af);
+
     // ── Session persistence ─────────────────────────────────────────────
     // The queue, the current track and the playback offset survive a restart.
     // A restored session stays paused and holds no stream: the audio is only
@@ -161,6 +166,7 @@ private:
     MpvAudio            *m_player    = nullptr;
     double               m_pendingVolume = 0.7;
     bool                 m_pendingMuted  = false;
+    QString              m_audioFilter;
 
     QList<QVariantMap>   m_queue;
     QList<QVariantMap>   m_recentlyPlayed;

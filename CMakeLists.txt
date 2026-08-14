@@ -47,6 +47,7 @@ set(SOURCES
     src/api/TidalClient.cpp
     src/api/TidalBridge.cpp
     src/player/Player.cpp
+    src/player/Equalizer.cpp
     src/player/MpvAudio.cpp
     src/player/DashFetcher.cpp
     src/player/DashStream.cpp
@@ -65,6 +66,7 @@ set(HEADERS
     src/api/TidalClient.h
     src/api/TidalBridge.h
     src/player/Player.h
+    src/player/Equalizer.h
     src/player/MpvAudio.h
     src/player/DashFetcher.h
     src/player/DashStream.h
@@ -151,6 +153,7 @@ qt_add_qml_module(tidal-wave
         qml/components/VolumeSlider.qml
         qml/components/SeekBar.qml
         qml/components/QueuePanel.qml
+        qml/components/EqualizerPanel.qml
         qml/components/VectorIcon.qml
         qml/pages/LoginPage.qml
         qml/pages/HomePage.qml

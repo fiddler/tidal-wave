@@ -186,6 +186,80 @@ Rectangle {
                 HoverHandler { id: volTipHov }
             }
 
+            IconButton {
+                id: eqBtn
+                icon: "eq-sliders"; size: 18
+                iconColor: equalizer.enabled ? Theme.accent : Theme.textSec
+                ToolTip.visible: eqTipHov.hovered
+                ToolTip.text: "Equalizer — right-click for profiles"
+                ToolTip.delay: 600
+                HoverHandler { id: eqTipHov }
+                onClicked: {
+                    eqQuickMenu.close()
+                    eqPanel.opened ? eqPanel.close() : eqPanel.open()
+                }
+                onRightClicked: {
+                    eqPanel.close()
+                    eqQuickMenu.opened ? eqQuickMenu.close() : eqQuickMenu.open()
+                }
+
+                EqualizerPanel {
+                    id: eqPanel
+                    y: -height - 10
+                    x: parent.width - width
+                }
+
+                // Right-click: flip profiles without opening the panel.
+                Popup {
+                    id: eqQuickMenu
+                    y: -height - 10
+                    x: parent.width - width
+                    width: 200
+                    padding: 6
+                    // See EqualizerPanel: keeps a press on the button from
+                    // close-then-reopening the menu.
+                    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+                    background: Rectangle {
+                        color: Theme.surfaceHigh; border.color: Theme.border; radius: 8
+                    }
+                    contentItem: ColumnLayout {
+                        spacing: 2
+                        Text {
+                            text: "EQ profile"; color: Theme.textDim
+                            font.pixelSize: 11; font.bold: true; font.letterSpacing: 1
+                            Layout.leftMargin: 8; Layout.topMargin: 4; Layout.bottomMargin: 2
+                        }
+                        EqQuickRow {
+                            label: "Off"
+                            active: !equalizer.enabled
+                            onSelected: { equalizer.enabled = false; eqQuickMenu.close() }
+                        }
+                        Text {
+                            visible: equalizer.profiles.length === 0
+                            text: "No saved profiles yet"
+                            color: Theme.textDim; font.pixelSize: 12
+                            Layout.margins: 8
+                        }
+                        Repeater {
+                            model: equalizer.profiles
+                            delegate: EqQuickRow {
+                                required property var modelData
+                                label: modelData.name
+                                active: equalizer.enabled &&
+                                        equalizer.activeProfile === modelData.name
+                                onSelected: {
+                                    // Picking a profile implies "I want to hear
+                                    // it" — switch the EQ on as well.
+                                    equalizer.applyProfile(modelData.name)
+                                    equalizer.enabled = true
+                                    eqQuickMenu.close()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Cast to a Chromecast / Google Home device (Linux only — `cast`
             // is null elsewhere, which hides the button).
             IconButton {
@@ -275,12 +349,41 @@ Rectangle {
         TapHandler   { onTapped: cr.selected() }
     }
 
+    // A selectable row in the EQ quick-switch menu.
+    component EqQuickRow : Rectangle {
+        id: eqr
+        property string label
+        property bool   active: false
+        signal selected()
+        Layout.fillWidth: true
+        implicitWidth: 180
+        implicitHeight: 32
+        radius: 6
+        color: eqrHov.hovered ? Theme.surfaceHov : "transparent"
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 8; anchors.rightMargin: 8; spacing: 8
+            Text {
+                Layout.fillWidth: true; text: eqr.label
+                color: eqr.active ? Theme.accent : Theme.textPrimary
+                font.pixelSize: 13; elide: Text.ElideRight
+            }
+            VectorIcon {
+                visible: eqr.active; name: "check"
+                width: 13; height: 13; strokeWidth: 2; color: Theme.accent
+            }
+        }
+        HoverHandler { id: eqrHov; cursorShape: Qt.PointingHandCursor }
+        TapHandler   { onTapped: eqr.selected() }
+    }
+
     component IconButton : Item {
         id: iconBtn
         property string icon
         property color  iconColor: Theme.textSec
         property int    size: 18
         signal clicked()
+        signal rightClicked()
         width: Math.max(size + 12, 32)
         height: Math.max(size + 12, 32)
 
@@ -313,5 +416,6 @@ Rectangle {
 
         HoverHandler { id: hov; cursorShape: Qt.PointingHandCursor }
         TapHandler   { onTapped: parent.clicked() }
+        TapHandler   { acceptedButtons: Qt.RightButton; onTapped: parent.rightClicked() }
     }
 }
