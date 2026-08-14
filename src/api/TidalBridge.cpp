@@ -562,7 +562,10 @@ void TidalBridge::markPlaylistPlayed(const QString &uuid) {
     playtimes[uuid] = QDateTime::currentMSecsSinceEpoch();
     settings.setValue(key, playtimes);
     qDebug() << "[TidalBridge] markPlaylistPlayed uuid:" << uuid << "timestamp:" << playtimes[uuid].toLongLong();
-    emit favoritePlaylistsChanged();
+    // Deliberately no favoritePlaylistsChanged here: re-sorting the sidebar at
+    // the moment of the click teleports the row the user just clicked, and the
+    // now-playing indicator already marks the active playlist. The stamped
+    // time reorders the list on the next load (app start / login) instead.
 }
 
 void TidalBridge::sortPlaylists(QList<Playlist> &playlists) const {
