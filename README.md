@@ -39,7 +39,7 @@ Tidal Wave is a native, lightweight desktop client for the Tidal music streaming
 *   **Chromecast Output** (Linux): Cast audio to Chromecast / Google Home devices — native mDNS discovery (Avahi) and CASTV2 control, with a built-in HTTP server that streams the current track (FLAC up to 96 kHz, or AAC) directly to the device. Downloads/downsamples on the fly so every quality tier casts.
 *   **Persistent Navigation State**: Separate loaders retain individual page states when jumping between Home, Search, and My Collection views.
 *   **Queue Panel**: Full queue management including track ordering, shuffle, and cycle repeat modes.
-*   **System Tray Integration**: Background playback support with system tray control options to show, hide, and quit the application.
+*   **System Tray Integration** (Linux/Windows): Background playback support with system tray control options to show, hide, and quit the application. On macOS there is no menu-bar item: closing the window keeps playback alive, the Dock icon brings the window back, and ⌘Q quits.
 *   **Rich Detail Pages**: Dedicated views for albums, artists, playlists, and mixes. Biographies are parsed as rich text with clickable navigation links.
 *   **Robust Sleep Timer**: Persistent background sleep timer in the Now Playing page with presets, a custom slider, a toggleable fade-out fader (with pop-prevention delay), and an end-of-track stopping mode.
 

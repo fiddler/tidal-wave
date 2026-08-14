@@ -75,6 +75,7 @@ static void silenceLogsAndAlsa() {
 #endif
 }
 
+#ifndef Q_OS_MACOS
 // Locates the bundled app icon in the Qt resource system.
 //
 // The QML module's RESOURCES prefix moved from ":/TidalWave/..." to
@@ -125,6 +126,7 @@ static QIcon loadAppIcon() {
     // fallback for non-KDE trays / if theme lookup fails.
     return QIcon::fromTheme(iconName, QIcon(resPath));
 }
+#endif // !Q_OS_MACOS
 
 Application::Application(QObject *parent) : QObject(parent) {
 }
@@ -142,12 +144,12 @@ int Application::run(int argc, char **argv) {
     QSurfaceFormat::setDefaultFormat(format);
 
     QApplication::setQuitOnLastWindowClosed(false);
-    const QIcon appIcon = loadAppIcon();
 #ifndef Q_OS_MACOS
     // On macOS this would overwrite the Dock/cmd-tab icon with the edge-to-edge
     // resource pixmap, which then renders larger than every other app icon.
-    // The bundled .icns already carries the correctly inset artwork there.
-    // appIcon is still used for the tray icon below on all platforms.
+    // The bundled .icns already carries the correctly inset artwork there, and
+    // macOS has no tray icon (see below), so the whole icon export is skipped.
+    const QIcon appIcon = loadAppIcon();
     QApplication::setWindowIcon(appIcon);
 #endif
 
@@ -222,6 +224,26 @@ int Application::run(int argc, char **argv) {
 
     m_auth->loadCredentials();
 
+#ifdef Q_OS_MACOS
+    // No menu-bar item on macOS. A player belongs in the Dock, not in the
+    // status bar, and the Dock icon already shows that the app runs. The tray
+    // menu did two things that must keep working without it:
+    //
+    //  • Show: closing the window only hides it (Main.qml), so the way back is
+    //    a click on the Dock icon. Cocoa answers that with a reopen, which Qt
+    //    forwards as an ApplicationActive state change (forced, so it arrives
+    //    even when the app is already the active one).
+    //  • Quit: ⌘Q, the Dock menu and a system logout all send QEvent::Quit to
+    //    the application. The window refuses every close until reallyQuit is
+    //    set, so the flag must go up before Qt starts to close windows — the
+    //    event filter below does that.
+    connect(qApp, &QGuiApplication::applicationStateChanged, this,
+            [this](Qt::ApplicationState state) {
+        if (state == Qt::ApplicationActive)
+            this->showWindow();
+    });
+    qApp->installEventFilter(this);
+#else
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         m_trayIcon = new QSystemTrayIcon(appIcon, this);
         m_trayIcon->setToolTip(QStringLiteral("Tidal Wave"));
@@ -248,6 +270,7 @@ int Application::run(int argc, char **argv) {
 
         m_trayIcon->show();
     }
+#endif // Q_OS_MACOS
 
     m_engine = new QQmlApplicationEngine(this);
     m_engine->addImageProvider(QStringLiteral("tidal"), new TidalImageProvider());
@@ -303,6 +326,17 @@ QString Application::lastNavPage()       const { return readNav(QStringLiteral("
 QString Application::lastNavParams()     const { return readNav(QStringLiteral("lastPageParams")); }
 QString Application::lastNavPrevPage()   const { return readNav(QStringLiteral("lastPrevPage")); }
 QString Application::lastNavPrevParams() const { return readNav(QStringLiteral("lastPrevPageParams")); }
+
+// Only installed on macOS, where the tray "Quit" item is gone: a quit that
+// comes from the system (⌘Q, Dock menu, logout) must be marked as real, or
+// Main.qml's onClosing rejects the close and the app stays up.
+bool Application::eventFilter(QObject *watched, QEvent *event) {
+    if (event->type() == QEvent::Quit && !m_reallyQuit) {
+        m_reallyQuit = true;
+        emit reallyQuitChanged();
+    }
+    return QObject::eventFilter(watched, event);
+}
 
 void Application::quit() {
     m_reallyQuit = true;

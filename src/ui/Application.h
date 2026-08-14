@@ -47,6 +47,9 @@ public:
     void hideWindow();
     void toggleWindow();
 
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 signals:
     void reallyQuitChanged();
 
