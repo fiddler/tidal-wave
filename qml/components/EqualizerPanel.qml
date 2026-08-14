@@ -215,12 +215,14 @@ Popup {
             id: bandsRow
             Layout.fillWidth: true
             Layout.topMargin: 4
-            readonly property real colW: width / 10
+            readonly property real colW: width / equalizer.bandLabels.length
             Repeater {
-                model: 10
+                // The labels are the band list — one source of truth with C++.
+                model: equalizer.bandLabels
                 delegate: Column {
                     id: band
                     required property int index
+                    required property var modelData
                     readonly property real gain: equalizer.gains[index]
                     width: bandsRow.colW
                     spacing: 6
@@ -245,7 +247,7 @@ Popup {
                     Text {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
-                        text: equalizer.bandLabels[index]
+                        text: band.modelData
                         color: Theme.textSec; font.pixelSize: 9
                     }
                 }
@@ -268,8 +270,11 @@ Popup {
                 Layout.fillWidth: true
                 height: 20
                 readonly property bool interactive: !equalizer.autoPreamp
+                // Clamped: the auto estimate can exceed the manual range when
+                // several neighbouring bands are boosted hard.
                 readonly property real norm:
-                    (equalizer.preamp + equalizer.gainLimit) / (equalizer.gainLimit * 2)
+                    Math.max(0, Math.min(1,
+                        (equalizer.preamp + equalizer.gainLimit) / (equalizer.gainLimit * 2)))
                 Rectangle {
                     anchors { left: parent.left; right: parent.right
                               verticalCenter: parent.verticalCenter }

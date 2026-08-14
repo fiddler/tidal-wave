@@ -165,7 +165,8 @@ Rectangle {
 
         // ── Right controls ─────────────────────────────
         RowLayout {
-            Layout.preferredWidth: 220; Layout.minimumWidth: 160
+            // Wide enough for mute + volume + EQ + queue, plus cast on Linux.
+            Layout.preferredWidth: 260; Layout.minimumWidth: 210
             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; spacing: 8
 
             Item { Layout.fillWidth: true }
@@ -248,10 +249,8 @@ Rectangle {
                                 active: equalizer.enabled &&
                                         equalizer.activeProfile === modelData.name
                                 onSelected: {
-                                    // Picking a profile implies "I want to hear
-                                    // it" — switch the EQ on as well.
+                                    // applyProfile also switches the EQ on.
                                     equalizer.applyProfile(modelData.name)
-                                    equalizer.enabled = true
                                     eqQuickMenu.close()
                                 }
                             }

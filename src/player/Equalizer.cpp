@@ -7,6 +7,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cstdlib>
 
 #include "Player.h"
 
@@ -49,9 +50,19 @@ Equalizer::Equalizer(Player *player, QObject *parent)
     m_applyTimer->setInterval(60);
     connect(m_applyTimer, &QTimer::timeout, this, &Equalizer::applyNow);
 
+    m_persistTimer = new QTimer(this);
+    m_persistTimer->setSingleShot(true);
+    m_persistTimer->setInterval(500);
+    connect(m_persistTimer, &QTimer::timeout, this, [this] { persist(); });
+
     load();
     // Player holds the string until libmpv is up, so this is safe pre-audio.
     applyNow();
+}
+
+Equalizer::~Equalizer() {
+    // A quit right after a fader drag must not lose the last half second.
+    if (m_persistTimer->isActive()) persist();
 }
 
 void Equalizer::load() {
@@ -73,11 +84,18 @@ void Equalizer::load() {
         for (const auto &v : profilesDoc.array()) {
             const QJsonObject o = v.toObject();
             const QString name  = o.value(QLatin1String("name")).toString().trimmed();
-            if (name.isEmpty()) continue;
+            // Hand-edited or torn JSON: drop nameless and duplicate entries,
+            // or the picker shows rows that all resolve to the first match.
+            if (name.isEmpty() || userProfileIndex(name) >= 0) continue;
             m_userProfiles.append({name,
                                    gainsFromJson(o.value(QLatin1String("gains")).toArray())});
         }
     }
+
+    // A ghost active name (profile list lost or edited) would show a
+    // deletable-looking profile that no longer exists.
+    if (!m_activeProfile.isEmpty() && userProfileIndex(m_activeProfile) < 0)
+        m_activeProfile.clear();
 }
 
 void Equalizer::persist() const {
@@ -86,8 +104,15 @@ void Equalizer::persist() const {
     s.setValue(QLatin1String(kSettingsPreamp),     m_preamp);
     s.setValue(QLatin1String(kSettingsAutoPreamp), m_autoPreamp);
     s.setValue(QLatin1String(kSettingsActive),     m_activeProfile);
+    // Stored as text, not QByteArray: every QSettings backend round-trips a
+    // QString faithfully, and it stays human-readable in the plist/INI.
     s.setValue(QLatin1String(kSettingsGains),
-               QJsonDocument(gainsToJson(m_gains)).toJson(QJsonDocument::Compact));
+               QString::fromUtf8(
+                   QJsonDocument(gainsToJson(m_gains)).toJson(QJsonDocument::Compact)));
+}
+
+void Equalizer::schedulePersist() {
+    m_persistTimer->start();
 }
 
 void Equalizer::persistProfiles() const {
@@ -99,7 +124,8 @@ void Equalizer::persistProfiles() const {
         arr.append(o);
     }
     QSettings().setValue(QLatin1String(kSettingsProfiles),
-                         QJsonDocument(arr).toJson(QJsonDocument::Compact));
+                         QString::fromUtf8(
+                             QJsonDocument(arr).toJson(QJsonDocument::Compact)));
 }
 
 QVariantList Equalizer::gains() const {
@@ -114,8 +140,20 @@ double Equalizer::preamp() const {
 
 double Equalizer::effectivePreamp() const {
     if (!m_autoPreamp) return m_preamp;
-    const double top = *std::max_element(m_gains.cbegin(), m_gains.cend());
-    return top > 0 ? -top : 0.0;
+    // The one-octave peaking filters overlap, so adjacent boosts sum past the
+    // largest single slider. Estimate the cascade's peak: every band gives
+    // its full gain at its own center plus a fraction at its neighbours',
+    // sampled from the biquad magnitude response at 1 and 2 octave offsets.
+    // Cuts contribute negatively — they genuinely create headroom.
+    static constexpr double kOverlap[3] = {1.0, 0.29, 0.08};
+    double worst = 0.0;
+    for (int i = 0; i < BandCount; ++i) {
+        double at = 0.0;
+        for (int j = std::max(0, i - 2); j <= std::min(BandCount - 1, i + 2); ++j)
+            at += m_gains[j] * kOverlap[std::abs(i - j)];
+        worst = std::max(worst, at);
+    }
+    return worst > 0 ? -std::min(worst, 2 * GainLimit) : 0.0;
 }
 
 QVariantList Equalizer::profiles() const {
@@ -147,7 +185,7 @@ void Equalizer::setPreamp(double dB) {
     dB = qBound(-GainLimit, dB, GainLimit);
     if (m_autoPreamp || qFuzzyCompare(m_preamp, dB)) return;
     m_preamp = dB;
-    persist();
+    schedulePersist();
     emit preampChanged();
     scheduleApply();
 }
@@ -167,7 +205,7 @@ void Equalizer::setGain(int band, double dB) {
     if (qFuzzyCompare(m_gains[band] + 1.0, dB + 1.0)) return;
     m_gains[band] = dB;
     setActiveProfile(QString());   // hand-edited → "Custom"
-    persist();
+    schedulePersist();
     emit gainsChanged();
     if (m_autoPreamp) emit preampChanged();
     scheduleApply();
@@ -191,6 +229,12 @@ void Equalizer::applyProfile(const QString &name) {
 
     m_gains = m_userProfiles[idx].gains;
     setActiveProfile(name);
+    // Applying a profile means "I want to hear this" — switch on too, so the
+    // panel dropdown and the quick menu behave the same.
+    if (!m_enabled) {
+        m_enabled = true;
+        emit enabledChanged();
+    }
     persist();
     emit gainsChanged();
     emit preampChanged();
@@ -226,7 +270,11 @@ void Equalizer::deleteProfile(const QString &name) {
 }
 
 void Equalizer::reset() {
+    // Sits next to the preamp row, so it reads as "reset the EQ", not just
+    // the bands — zero the manual preamp too. The Auto choice is a mode, not
+    // part of the curve, and stays as it is.
     m_gains.fill(0.0);
+    m_preamp = 0.0;
     setActiveProfile(QString());
     persist();
     emit gainsChanged();

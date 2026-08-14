@@ -39,6 +39,7 @@ public:
     double gainLimit() const { return GainLimit; }
 
     explicit Equalizer(Player *player, QObject *parent = nullptr);
+    ~Equalizer() override;
 
     bool         enabled()       const { return m_enabled; }
     QVariantList gains()         const;
@@ -76,10 +77,15 @@ private:
 
     void    load();
     void    persist() const;
+    // Settings writes are debounced like the mpv pushes: a fader drag emits
+    // ~2 steps per pixel and each QSettings sync is a plist write.
+    void    schedulePersist();
     void    persistProfiles() const;
     void    setActiveProfile(const QString &name);
     // Preamp that is actually applied: the manual value, or with auto on the
-    // negative of the largest boost so the sum can never clip.
+    // negative of the cascade's estimated peak boost (neighbouring octave
+    // bands overlap, so the estimate sums each band with a sampled fraction
+    // of its neighbours rather than taking the largest slider alone).
     double  effectivePreamp() const;
     QString filterString() const;
     // Debounced: slider drags fire per pixel, mpv only needs the settled value.
@@ -89,6 +95,7 @@ private:
 
     Player          *m_playerCtl = nullptr;
     QTimer          *m_applyTimer = nullptr;
+    QTimer          *m_persistTimer = nullptr;
     QVector<double>  m_gains;
     QVector<Profile> m_userProfiles;
     QString          m_activeProfile;
