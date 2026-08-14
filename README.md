@@ -17,9 +17,9 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 > - **macOS polish** — real app bundle with icon, media keys / Now Playing
 > - **Sidebar upgrades** — now-playing indicator, track counts, sort & filter
 >   menu, playlist creation, crisper icon rendering
-> - **10-band equalizer** — mpv/FFmpeg-backed EQ with auto preamp, built-in
->   presets and saveable profiles; right-click the player-bar EQ icon to flip
->   profiles instantly
+> - **10-band equalizer** — mpv/FFmpeg-backed EQ (32 Hz–16 kHz, ±24 dB) with
+>   saveable profiles, manual or auto preamp, and curve editing while the EQ
+>   is off; right-click the player-bar EQ icon to flip profiles instantly
 >
 > Upstream maintainers: every commit is scoped and conventional — cherry-pick
 > anything you like, or ask for a focused PR of any subset.
