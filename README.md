@@ -2,6 +2,25 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 
 # Tidal Wave Desktop Client
 
+> **This is a fork** of [immineal/tidal-wave](https://github.com/immineal/tidal-wave)
+> (branch `extended`, with `main` kept as a clean upstream mirror). On top of
+> upstream it adds:
+>
+> - **Offline playlists** — pin a playlist for offline playback, synced at
+>   listening speed with size/time estimates, resumable, with cached cover art
+> - **Local music library** — import files/folders, local-only playlists,
+>   folder cover art, drag & drop between local and Tidal content
+> - **PKCE login** — unlocks LOSSLESS and HI_RES_LOSSLESS streaming
+> - **mpv audio engine** — replaces QMediaPlayer; gapless-quality local and
+>   DASH playback, plus lossless casting fixes
+> - **Session restore** — queue, track, position and last page survive restarts
+> - **macOS polish** — real app bundle with icon, media keys / Now Playing
+> - **Sidebar upgrades** — now-playing indicator, track counts, sort & filter
+>   menu, playlist creation, crisper icon rendering
+>
+> Upstream maintainers: every commit is scoped and conventional — cherry-pick
+> anything you like, or ask for a focused PR of any subset.
+
 Tidal Wave is a native, lightweight desktop client for the Tidal music streaming service. It is built using C++20, CMake, and Qt 6/QML, delivering a fast, system-integrated music listening experience.
 
 ## Interface Screenshot
