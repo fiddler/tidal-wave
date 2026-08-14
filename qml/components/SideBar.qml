@@ -127,6 +127,11 @@ Rectangle {
                 height: 36
                 readonly property int rowIndex: index
 
+                // True while the play queue was started from this playlist —
+                // the title tints accent and an equalizer joins the row.
+                readonly property bool isSource: player.sourceType === "playlist"
+                                                 && player.sourceId === model.uuid
+
                 // Offline pin state of this playlist, rendered as the small
                 // icon on the right: green check = downloaded, dim arrow =
                 // still syncing.
@@ -182,18 +187,29 @@ Rectangle {
                         anchors.leftMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
                         text: model.title
-                        color: Theme.textSec
+                        color: plDelegate.isSource ? Theme.accent : Theme.textSec
                         font.pixelSize: 13
                         elide: Text.ElideRight
-                        width: parent.width - (plOfflineIcon.visible ? 48 : 32)
+                        width: parent.width - 26 - plIndicators.width
                     }
+                    Row {
+                        id: plIndicators
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 6
+
+                        EqualizerBars {
+                            visible: plDelegate.isSource
+                            running: player.playing
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
                     // Downloaded = the Spotify-style green circle with a down
                     // arrow; syncing = a dim bare arrow; failed = a red one.
                     Item {
                         id: plOfflineIcon
                         visible: plDelegate.offState !== "none"
-                        anchors.right: parent.right
-                        anchors.rightMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
                         width: 15; height: 15
 
@@ -217,6 +233,7 @@ Rectangle {
                             name: "download"
                             color: plDelegate.offState === "error" ? Theme.red : Theme.textDim
                         }
+                    }
                     }
                     ToolTip {
                         id: plToolTip
@@ -313,6 +330,8 @@ Rectangle {
                 width: ListView.view.width
                 height: 36
                 readonly property int rowIndex: index
+                readonly property bool isSource: player.sourceType === "localplaylist"
+                                                 && player.sourceId === String(model.id)
 
                 function activate() {
                     root.navigate("localplaylist", {
@@ -368,10 +387,16 @@ Rectangle {
                             id: lplText
                             anchors.verticalCenter: parent.verticalCenter
                             text: model.title
-                            color: Theme.textSec
+                            color: lplDelegate.isSource ? Theme.accent : Theme.textSec
                             font.pixelSize: 13
                             elide: Text.ElideRight
-                            width: parent.width - 40
+                            width: parent.width - 40 - (lplEq.visible ? 18 : 0)
+                        }
+                        EqualizerBars {
+                            id: lplEq
+                            visible: lplDelegate.isSource
+                            running: player.playing
+                            anchors.verticalCenter: parent.verticalCenter
                         }
                     }
                 }
