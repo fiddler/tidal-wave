@@ -124,7 +124,7 @@ Rectangle {
             delegate: Item {
                 id: plDelegate
                 width: ListView.view.width
-                height: 36
+                height: 42
                 readonly property int rowIndex: index
 
                 // True while the play queue was started from this playlist —
@@ -181,16 +181,27 @@ Rectangle {
                     TapHandler {
                         onTapped: plDelegate.activate()
                     }
-                    Text {
-                        id: plText
+                    Column {
                         anchors.left: parent.left
                         anchors.leftMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
-                        text: model.title
-                        color: plDelegate.isSource ? Theme.accent : Theme.textSec
-                        font.pixelSize: 13
-                        elide: Text.ElideRight
                         width: parent.width - 26 - plIndicators.width
+                        spacing: 1
+                        Text {
+                            id: plText
+                            width: parent.width
+                            text: model.title
+                            color: plDelegate.isSource ? Theme.accent : Theme.textSec
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            width: parent.width
+                            text: model.numTracks === 1 ? "1 track" : model.numTracks + " tracks"
+                            color: Theme.textDim
+                            font.pixelSize: 10
+                            elide: Text.ElideRight
+                        }
                     }
                     Row {
                         id: plIndicators
@@ -328,7 +339,7 @@ Rectangle {
             delegate: Item {
                 id: lplDelegate
                 width: ListView.view.width
-                height: 36
+                height: 42
                 readonly property int rowIndex: index
                 readonly property bool isSource: player.sourceType === "localplaylist"
                                                  && player.sourceId === String(model.id)
@@ -383,14 +394,25 @@ Rectangle {
                             name: "music"; color: Theme.textDim
                             width: 12; height: 12; strokeWidth: 1.6
                         }
-                        Text {
-                            id: lplText
+                        Column {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: model.title
-                            color: lplDelegate.isSource ? Theme.accent : Theme.textSec
-                            font.pixelSize: 13
-                            elide: Text.ElideRight
-                            width: parent.width - 40 - (lplEq.visible ? 18 : 0)
+                            width: parent.width - 20 - (lplEq.visible ? 18 : 0)
+                            spacing: 1
+                            Text {
+                                id: lplText
+                                width: parent.width
+                                text: model.title
+                                color: lplDelegate.isSource ? Theme.accent : Theme.textSec
+                                font.pixelSize: 13
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width
+                                text: model.numTracks === 1 ? "1 track" : model.numTracks + " tracks"
+                                color: Theme.textDim
+                                font.pixelSize: 10
+                                elide: Text.ElideRight
+                            }
                         }
                         EqualizerBars {
                             id: lplEq
@@ -490,7 +512,8 @@ Rectangle {
                     title:   playlists[i].title,
                     uuid:    playlists[i].uuid,
                     coverUrl: playlists[i].coverUrl || "",
-                    type:    playlists[i].type || ""
+                    type:    playlists[i].type || "",
+                    numTracks: playlists[i].numTracks || 0
                 })
             }
         }, 30, 0)
