@@ -111,6 +111,8 @@ Item {
             return "M 9 2 H 15 V 10 H 21 L 12 22 L 3 10 H 9 Z"
         case "check":
             return "M 5 12 L 10 17 L 19 7"
+        case "sort":
+            return "M 7 4 V 20 M 3 8 L 7 4 L 11 8 M 17 20 V 4 M 13 16 L 17 20 L 21 16"
         case "cast":
             return "M 3 12 V 5 H 21 V 18 H 11 M 3 15 A 4 4 0 0 1 7 19 M 3 18 A 1 1 0 0 1 4 19"
         }

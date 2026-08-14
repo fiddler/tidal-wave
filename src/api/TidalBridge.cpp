@@ -125,6 +125,9 @@ QVariantMap TidalBridge::playlistToMap(const Playlist &p) {
     m["duration"]    = p.duration;
     m["coverUrl"]    = p.coverUrl(320);
     m["type"]        = p.type;
+    m["created"]     = p.created;
+    m["updated"]     = p.lastUpdated;
+    m["creatorId"]   = p.creatorId;
     return m;
 }
 
@@ -358,6 +361,12 @@ void TidalBridge::removeArtistFavorite(qlonglong artistId, QJSValue cb) {
 
 void TidalBridge::createPlaylist(const QString &title, QJSValue cb) {
     m_client->createPlaylist(title, [this, cb](Playlist p, QString err) mutable {
+        // Keep the cached collection current so every list reading it (the
+        // sidebar, add-to-playlist menus) shows the new playlist at once.
+        if (err.isEmpty() && !p.uuid.isEmpty()) {
+            m_favoritePlaylists.prepend(p);
+            emit favoritePlaylistsChanged();
+        }
         call(cb, { qjsEngine(this)->toScriptValue(playlistToMap(p)),
                    qjsEngine(this)->toScriptValue(err) });
     });

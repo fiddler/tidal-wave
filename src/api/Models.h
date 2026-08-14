@@ -137,6 +137,9 @@ struct Playlist {
     int     duration  = 0;
     QString image;  // UUID
     QString type;   // USER / EDITORIAL
+    QString created;      // ISO timestamps as sent — sort lexicographically
+    QString lastUpdated;
+    qint64  creatorId = 0;   // 0 for editorial; your uid for playlists you made
 
     QString coverUrl(int size = 320) const {
         if (image.isEmpty()) return {};
@@ -157,6 +160,9 @@ struct Playlist {
         // that 403s at square dimensions, so prefer squareImage.
         p.image       = j["squareImage"].toString(j["image"].toString());
         p.type        = j["type"].toString();
+        p.created     = j["created"].toString();
+        p.lastUpdated = j["lastUpdated"].toString();
+        p.creatorId   = j["creator"].toObject()["id"].toVariant().toLongLong();
         return p;
     }
 };

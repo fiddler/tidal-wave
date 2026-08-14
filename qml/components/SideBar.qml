@@ -1,3 +1,4 @@
+import QtCore
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -11,6 +12,50 @@ Rectangle {
     signal navigate(string page, var params)
 
     function openSettings() { settingsPopup.open() }
+
+    // Sort/filter preferences for the Tidal playlist list, persisted.
+    Settings {
+        id: plPrefs
+        category: "sidebar"
+        property string sortMode: "recent"    // recent | updated | created | alpha
+        property string filterMode: "all"     // all | mine | followed
+    }
+
+    // Heading and row for the sort/filter menu (inline components must live at
+    // the document root).
+    component MenuHeading: Text {
+        leftPadding: 10; topPadding: 6; bottomPadding: 4
+        color: Theme.textDim
+        font.pixelSize: 10; font.bold: true; font.letterSpacing: 1.5
+    }
+    component MenuRow: Rectangle {
+        id: menuRow
+        required property string key
+        required property string label
+        required property string group   // "sort" | "filter"
+        readonly property bool active:
+            (group === "sort" ? plPrefs.sortMode : plPrefs.filterMode) === key
+        signal picked()
+        width: parent ? parent.width : 0
+        height: 30; radius: 6
+        color: menuRowHov.hovered ? Theme.surfaceHov : "transparent"
+        Text {
+            anchors.left: parent.left; anchors.leftMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            text: menuRow.label
+            color: menuRow.active ? Theme.accent : Theme.textPrimary
+            font.pixelSize: 13
+        }
+        VectorIcon {
+            visible: menuRow.active
+            anchors.right: parent.right; anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            name: "check"; width: 11; height: 11; strokeWidth: 2.5
+            color: Theme.accent
+        }
+        HoverHandler { id: menuRowHov; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: menuRow.picked() }
+    }
 
     ColumnLayout {
         anchors.top: parent.top
@@ -77,13 +122,88 @@ Rectangle {
         Rectangle { color: Theme.border; height: 1; Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16 }
         Item { height: 16 }
 
-        Text {
+        RowLayout {
+            Layout.fillWidth: true
             Layout.leftMargin: 20
-            text: "PLAYLISTS"
-            color: Theme.textDim
-            font.pixelSize: 10
-            font.bold: true
-            font.letterSpacing: 1.5
+            Layout.rightMargin: 10
+            spacing: 4
+
+            Text {
+                text: "PLAYLISTS"
+                color: Theme.textDim
+                font.pixelSize: 10
+                font.bold: true
+                font.letterSpacing: 1.5
+            }
+            Item { Layout.fillWidth: true }
+
+            // New playlist
+            Rectangle {
+                width: 22; height: 22; radius: 11
+                color: plusHov.hovered ? Theme.surfaceHov : "transparent"
+                VectorIcon {
+                    anchors.centerIn: parent
+                    name: "plus"; width: 12; height: 12; strokeWidth: 2
+                    color: plusHov.hovered ? Theme.textPrimary : Theme.textDim
+                }
+                HoverHandler { id: plusHov; cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    onTapped: { newPlaylistField.text = ""; createPlaylistPopup.open() }
+                }
+                ToolTip {
+                    visible: plusHov.hovered; delay: 600; text: "New playlist"
+                    background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 4 }
+                    contentItem: Text { text: "New playlist"; color: Theme.textPrimary; font.pixelSize: 12 }
+                }
+            }
+
+            // Sort & filter
+            Rectangle {
+                id: sortBtn
+                width: 22; height: 22; radius: 11
+                color: sortHov.hovered || plSortPopup.opened ? Theme.surfaceHov : "transparent"
+                VectorIcon {
+                    anchors.centerIn: parent
+                    name: "sort"; width: 12; height: 12; strokeWidth: 2
+                    color: sortHov.hovered || plSortPopup.opened ? Theme.textPrimary : Theme.textDim
+                }
+                HoverHandler { id: sortHov; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: plSortPopup.open() }
+
+                Popup {
+                    id: plSortPopup
+                    x: -width + parent.width
+                    y: parent.height + 6
+                    width: 210
+                    padding: 6
+                    background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 10 }
+
+                    function pick(group, key) {
+                        if (group === "sort") plPrefs.sortMode = key
+                        else                  plPrefs.filterMode = key
+                        root.applyPlaylistView()
+                        plSortPopup.close()
+                    }
+
+                    Column {
+                        width: parent.width
+                        spacing: 1
+
+                        MenuHeading { text: "SORT" }
+                        MenuRow { group: "sort"; key: "recent";  label: "Recently played"; onPicked: plSortPopup.pick(group, key) }
+                        MenuRow { group: "sort"; key: "updated"; label: "Updated date";    onPicked: plSortPopup.pick(group, key) }
+                        MenuRow { group: "sort"; key: "created"; label: "Created date";    onPicked: plSortPopup.pick(group, key) }
+                        MenuRow { group: "sort"; key: "alpha";   label: "Alphabetical";    onPicked: plSortPopup.pick(group, key) }
+
+                        Rectangle { width: parent.width; height: 1; color: Theme.border }
+
+                        MenuHeading { text: "FILTER" }
+                        MenuRow { group: "filter"; key: "all";      label: "All playlists";      onPicked: plSortPopup.pick(group, key) }
+                        MenuRow { group: "filter"; key: "mine";     label: "Your playlists";     onPicked: plSortPopup.pick(group, key) }
+                        MenuRow { group: "filter"; key: "followed"; label: "Followed playlists"; onPicked: plSortPopup.pick(group, key) }
+                    }
+                }
+            }
         }
 
         Item { height: 8 }
@@ -504,19 +624,46 @@ Rectangle {
         }
     }
 
+    // Raw fetch result, in the bridge's recently-played order. The visible
+    // model is derived from it by applyPlaylistView() below.
+    property var allPlaylists: []
+
     function loadPlaylists() {
-        bridge.fetchUserPlaylists(function(playlists, err) {
-            playlistModel.clear()
-            for (var i = 0; i < playlists.length; i++) {
-                playlistModel.append({
-                    title:   playlists[i].title,
-                    uuid:    playlists[i].uuid,
-                    coverUrl: playlists[i].coverUrl || "",
-                    type:    playlists[i].type || "",
-                    numTracks: playlists[i].numTracks || 0
-                })
-            }
-        }, 30, 0)
+        // The bridge pages the full playlist collection into memory at login
+        // (50 per request, until exhausted) and re-emits favoritePlaylistsChanged
+        // as pages land — so this cache is always the complete list.
+        root.allPlaylists = bridge.getUserPlaylists()
+        root.applyPlaylistView()
+    }
+
+    function applyPlaylistView() {
+        var list = root.allPlaylists.slice()
+        var uid = auth.userId
+
+        if (plPrefs.filterMode === "mine")
+            list = list.filter(function(p) { return p.creatorId === uid })
+        else if (plPrefs.filterMode === "followed")
+            list = list.filter(function(p) { return p.creatorId !== uid })
+
+        // "recent" keeps the fetch order (recently played first). The date
+        // fields are ISO timestamps, so string comparison sorts correctly.
+        if (plPrefs.sortMode === "alpha")
+            list.sort(function(a, b) { return a.title.localeCompare(b.title) })
+        else if (plPrefs.sortMode === "updated")
+            list.sort(function(a, b) { return (b.updated || "").localeCompare(a.updated || "") })
+        else if (plPrefs.sortMode === "created")
+            list.sort(function(a, b) { return (b.created || "").localeCompare(a.created || "") })
+
+        playlistModel.clear()
+        for (var i = 0; i < list.length; i++) {
+            playlistModel.append({
+                title:   list[i].title,
+                uuid:    list[i].uuid,
+                coverUrl: list[i].coverUrl || "",
+                type:    list[i].type || "",
+                numTracks: list[i].numTracks || 0
+            })
+        }
     }
 
     Component.onCompleted: { if (auth.state === 2) loadPlaylists() }
@@ -532,6 +679,72 @@ Rectangle {
         target: bridge
         function onFavoritePlaylistsChanged() {
             loadPlaylists()
+        }
+    }
+
+    Popup {
+        id: createPlaylistPopup
+        anchors.centerIn: Overlay.overlay
+        width: 360
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 20
+        background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 12 }
+        onOpened: newPlaylistField.forceActiveFocus()
+
+        function create() {
+            var title = newPlaylistField.text.trim()
+            if (title.length === 0) return
+            bridge.createPlaylist(title, function(p, err) {
+                if (err) { SyncState.fail("Could not create the playlist: " + err); return }
+                root.loadPlaylists()
+                root.navigate("playlist", {
+                    playlistUuid: p.uuid, playlistTitle: p.title,
+                    coverUrl: p.coverUrl || "", playlistType: "USER"
+                })
+            })
+            createPlaylistPopup.close()
+        }
+
+        Column {
+            width: parent.width
+            spacing: 14
+
+            Text { text: "New Playlist"; color: Theme.textPrimary; font.pixelSize: 16; font.bold: true }
+
+            Rectangle { width: parent.width; height: 1; color: Theme.border }
+
+            Rectangle {
+                width: parent.width; height: 36; radius: 6
+                color: Theme.surface
+                border.color: newPlaylistField.activeFocus ? Theme.accent : Theme.border
+                TextInput {
+                    id: newPlaylistField
+                    anchors.fill: parent; anchors.margins: 8
+                    color: Theme.textPrimary; font.pixelSize: 14
+                    selectionColor: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.4)
+                    Keys.onReturnPressed: createPlaylistPopup.create()
+                    Text {
+                        anchors.fill: parent
+                        visible: newPlaylistField.text.length === 0 && !newPlaylistField.activeFocus
+                        text: "Playlist name"
+                        color: Theme.textDim; font.pixelSize: 14
+                    }
+                }
+            }
+
+            Row {
+                spacing: 10; anchors.right: parent.right
+                PillButton {
+                    text: "Cancel"; accent: false
+                    onClicked: createPlaylistPopup.close()
+                }
+                PillButton {
+                    text: "Create"; accent: true
+                    onClicked: createPlaylistPopup.create()
+                }
+            }
         }
     }
 

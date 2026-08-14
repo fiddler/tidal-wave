@@ -9,6 +9,8 @@ class Auth : public QObject {
     Q_PROPERTY(QString userCode READ userCode NOTIFY userCodeChanged)
     Q_PROPERTY(QString verificationUrl READ verificationUrl NOTIFY userCodeChanged)
     Q_PROPERTY(QString username READ username NOTIFY usernameChanged)
+    // userId lands together with the login state flip, so stateChanged covers it.
+    Q_PROPERTY(qint64 userId READ userId NOTIFY stateChanged)
 
 public:
     // Appended, never reordered: QML compares state against the raw ints.
