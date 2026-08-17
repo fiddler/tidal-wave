@@ -299,8 +299,26 @@ QString Equalizer::filterString() const {
     }
     if (parts.isEmpty()) return QString();   // flat EQ = bit-perfect passthrough
 
+    // Convert to float BEFORE the bands, or the EQ destroys the signal.
+    //
+    // mpv takes the filter chain's sample format from the decoder, so a
+    // lossless FLAC track runs the chain in s16 — and FFmpeg's `equalizer`
+    // clips its output to that integer range at EVERY band. A boosted band
+    // therefore distorts inside the chain, one stage at a time, and mpv's
+    // volume (applied after the chain, on the same integer samples) cannot
+    // recover it. An AAC track decodes to float and the identical filter
+    // string sounds clean — which is why the same profile was fine on one
+    // track and mush on the next.
+    //
+    // With one up-front conversion the whole chain, and the volume control
+    // after it, work in float: boosts stay intact and headroom comes from the
+    // volume control, exactly like a system-wide EQ such as eqMac. Only added
+    // when a band is actually active, so a flat or disabled EQ still passes
+    // the original samples through untouched.
+    //
     // Labeled @eq so nothing else in a future af chain gets clobbered.
-    return QStringLiteral("@eq:lavfi=[%1]").arg(parts.join(QLatin1Char(',')));
+    return QStringLiteral("@eqfmt:format=format=floatp,@eq:lavfi=[%1]")
+        .arg(parts.join(QLatin1Char(',')));
 }
 
 void Equalizer::scheduleApply() {

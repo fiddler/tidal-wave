@@ -15,6 +15,11 @@ class QTimer;
 // dropout, so profile flips are instant, and the property persists across
 // track changes on its own.
 //
+// The chain is forced to float while any band is active: mpv would otherwise
+// inherit the decoder's integer format and every biquad would clip its own
+// output. See the comment on filterString() — that one line is the difference
+// between a clean boost and mush.
+//
 // Scope: local mpv output only. Chromecast streams the file bytes straight to
 // the device, so the EQ never touches that path (the UI says so).
 class Equalizer : public QObject {
