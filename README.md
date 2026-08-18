@@ -20,6 +20,9 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 > - **10-band equalizer** — mpv/FFmpeg-backed EQ (32 Hz–16 kHz, ±24 dB) with
 >   saveable profiles, manual or auto preamp, and curve editing while the EQ
 >   is off; right-click the player-bar EQ icon to flip profiles instantly
+> - **Follow & save fixed** — the artist Follow and album Save buttons now
+>   update the cached favorites, so the button flips at once and the item
+>   shows in My Collection without a restart (upstream bug)
 >
 > Upstream maintainers: every commit is scoped and conventional — cherry-pick
 > anything you like, or ask for a focused PR of any subset.
