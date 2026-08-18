@@ -91,6 +91,7 @@ public:
     void fetchArtistAlbums (qint64 artistId,       AlbumsCallback    cb);
     void fetchArtistTopTracks(qint64 artistId,     TracksCallback    cb);
     void fetchAlbum        (qint64 albumId,        std::function<void(Album,QString)>  cb);
+    void fetchArtist       (qint64 artistId,       std::function<void(Artist,QString)> cb);
     void fetchTrack        (qint64 trackId,        std::function<void(Track,QString)>  cb);
 
     // Search

@@ -180,6 +180,12 @@ void TidalClient::fetchAlbum(qint64 albumId, std::function<void(Album,QString)> 
             cb(err.isEmpty() ? Album::fromJson(root) : Album{}, err); });
 }
 
+void TidalClient::fetchArtist(qint64 artistId, std::function<void(Artist,QString)> cb) {
+    m_api->get(QStringLiteral("artists/%1").arg(artistId), {},
+        [cb](QJsonObject root, QString err) {
+            cb(err.isEmpty() ? Artist::fromJson(root) : Artist{}, err); });
+}
+
 void TidalClient::fetchTrack(qint64 trackId, std::function<void(Track,QString)> cb) {
     m_api->get(QStringLiteral("tracks/%1").arg(trackId), {},
         [cb](QJsonObject root, QString err) {

@@ -317,7 +317,24 @@ bool TidalBridge::isAlbumFavorite(qlonglong albumId) const {
 
 void TidalBridge::addAlbumFavorite(qlonglong albumId, QJSValue cb) {
     m_client->addAlbumFavorite(albumId, [this, albumId, cb](bool success) mutable {
-        if (success) emit favoriteAlbumsChanged();
+        if (success) {
+            // Same shape as addArtistFavorite: stub now, details on fetch.
+            const bool exists = std::any_of(
+                m_favoriteAlbums.cbegin(), m_favoriteAlbums.cend(),
+                [&](const Album &x) { return x.id == albumId; });
+            if (!exists) {
+                Album stub;
+                stub.id = albumId;
+                m_favoriteAlbums.append(stub);
+            }
+            emit favoriteAlbumsChanged();
+            m_client->fetchAlbum(albumId, [this, albumId](Album a, QString err) {
+                if (!err.isEmpty() || a.id <= 0) return;
+                for (auto &x : m_favoriteAlbums)
+                    if (x.id == albumId) { x = a; break; }
+                emit favoriteAlbumsChanged();
+            });
+        }
         call(cb, { success });
     });
 }
@@ -342,7 +359,25 @@ bool TidalBridge::isArtistFavorite(qlonglong artistId) const {
 
 void TidalBridge::addArtistFavorite(qlonglong artistId, QJSValue cb) {
     m_client->addArtistFavorite(artistId, [this, artistId, cb](bool success) mutable {
-        if (success) emit favoriteArtistsChanged();
+        if (success) {
+            // Insert a stub right away so isArtistFavorite() flips without
+            // waiting a round-trip; the fetch below fills in name/picture.
+            const bool exists = std::any_of(
+                m_favoriteArtists.cbegin(), m_favoriteArtists.cend(),
+                [&](const Artist &x) { return x.id == artistId; });
+            if (!exists) {
+                Artist stub;
+                stub.id = artistId;
+                m_favoriteArtists.append(stub);
+            }
+            emit favoriteArtistsChanged();
+            m_client->fetchArtist(artistId, [this, artistId](Artist a, QString err) {
+                if (!err.isEmpty() || a.id <= 0) return;
+                for (auto &x : m_favoriteArtists)
+                    if (x.id == artistId) { x = a; break; }
+                emit favoriteArtistsChanged();
+            });
+        }
         call(cb, { success });
     });
 }
