@@ -23,6 +23,9 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 > - **Follow & save fixed** — the artist Follow and album Save buttons now
 >   update the cached favorites, so the button flips at once and the item
 >   shows in My Collection without a restart (upstream bug)
+> - **Readable artist bios** — the About text keeps a comfortable line length,
+>   Tidal's own `<br/>` tags become paragraphs instead of visible markup, and
+>   the in-text links drop the bold and show a pointer cursor on hover
 >
 > Upstream maintainers: every commit is scoped and conventional — cherry-pick
 > anything you like, or ask for a focused PR of any subset.

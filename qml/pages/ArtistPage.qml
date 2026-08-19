@@ -275,24 +275,42 @@ Rectangle {
                     font.bold: true
                 }
 
-                Text {
+                // A bio set across the full window width is hard to read: the eye
+                // loses the line it came from on the way back. The wrapper keeps
+                // the text left-aligned while the measure stays comfortable.
+                Item {
                     Layout.fillWidth: true
-                    text: root.formatBio(artistData.bio || "")
-                    color: Theme.textSec
-                    font.pixelSize: 14
-                    wrapMode: Text.WordWrap
-                    lineHeight: 1.5
-                    textFormat: Text.RichText
-                    onLinkActivated: (link) => {
-                        var parts = link.split(":")
-                        if (parts.length === 2) {
-                            var type = parts[0]
-                            var id = Number(parts[1])
-                            if (type === "artist") {
-                                navigateTo("artist", { artistId: id })
-                            } else if (type === "album") {
-                                navigateTo("album", { albumId: id })
+                    implicitHeight: bioText.implicitHeight
+
+                    Text {
+                        id: bioText
+                        anchors.left: parent.left
+                        width: Math.min(parent.width, 760)
+                        text: root.formatBio(artistData.bio || "")
+                        color: Theme.textPrimary
+                        font.pixelSize: 15
+                        wrapMode: Text.WordWrap
+                        lineHeight: 1.6
+                        textFormat: Text.RichText
+                        onLinkActivated: (link) => {
+                            var parts = link.split(":")
+                            if (parts.length === 2) {
+                                var type = parts[0]
+                                var id = Number(parts[1])
+                                if (type === "artist") {
+                                    navigateTo("artist", { artistId: id })
+                                } else if (type === "album") {
+                                    navigateTo("album", { albumId: id })
+                                }
                             }
+                        }
+
+                        // Text does not change the cursor over links by itself, so
+                        // hit-test the pointer position against the rich text.
+                        HoverHandler {
+                            id: bioHov
+                            cursorShape: bioText.linkAt(point.position.x, point.position.y) !== ""
+                                         ? Qt.PointingHandCursor : Qt.ArrowCursor
                         }
                     }
                 }
@@ -322,9 +340,15 @@ Rectangle {
             .replace(/>/g, "&gt;")
         html = html.replace(/\[wimpLink\s+(artistId|albumId|playlistId|trackId)="([^"]+)"\](.*?)\[\/wimpLink\]/g, function(match, typeAttr, id, text) {
             var type = typeAttr.replace("Id", "")
-            return "<a href='" + type + ":" + id + "' style='color: " + Theme.accent + "; text-decoration: none; font-weight: bold;'>" + text + "</a>"
+            // Links are not bold: almost every proper noun in a Tidal bio is one,
+            // and bolding them all turns the paragraph into noise.
+            return "<a href='" + type + ":" + id + "' style='color: " + Theme.accent + "; text-decoration: none;'>" + text + "</a>"
         })
-        return html.replace(/\n/g, "<br/>")
+        // Tidal bios carry their own <br/> tags. The escaping above turned them
+        // into visible text, so put the real breaks back, then collapse each run
+        // of breaks (and of blank lines) into one paragraph gap.
+        html = html.replace(/&lt;br\s*\/?&gt;/gi, "\n\n")
+        return html.replace(/\n\s*\n[\s\n]*/g, "<br/><br/>").replace(/\n/g, "<br/>")
     }
 
     function navigateTo(page, params) {
