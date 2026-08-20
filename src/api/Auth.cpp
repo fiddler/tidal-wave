@@ -209,6 +209,15 @@ void Auth::refreshAccessToken() {
         m_tokenExpiry = QDateTime::currentDateTime().addSecs(obj["expires_in"].toInt(3600));
         m_api->setAccessToken(m_accessToken);
         saveCredentials();
+        // A cold start whose access token expired while the app was closed
+        // lands here with no userId and no country code, and the state is
+        // still Restoring. fetchSession() fills those in, schedules the next
+        // refresh and flips the state to LoggedIn; without it the app sits on
+        // the login page holding a perfectly good token.
+        if (m_state != State::LoggedIn) {
+            fetchSession();
+            return;
+        }
         // Schedule next refresh 60s before expiry
         qint64 msec = QDateTime::currentDateTime().msecsTo(m_tokenExpiry) - 60000;
         if (msec > 0) m_refreshTimer->start(msec);
@@ -271,6 +280,11 @@ void Auth::loadCredentials() {
     m_isPkce       = obj["is_pkce"].toBool(false);
 
     if (m_accessToken.isEmpty() || m_refreshToken.isEmpty()) return;
+
+    // Saved tokens exist, so treat the user as logged in until the server says
+    // otherwise. Staying LoggedOut here puts the login page on screen for the
+    // length of the session check, every launch.
+    setState(State::Restoring);
 
     m_api->setAccessToken(m_accessToken);
     m_api->setCountryCode(m_countryCode);

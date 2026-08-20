@@ -488,9 +488,16 @@ ApplicationWindow {
                 Loader {
                     id: loginLoader
                     anchors.fill: parent
-                    visible: auth.state !== 2
-                    active: auth.state !== 2
+                    // 4 is Restoring, the startup session check. The splash
+                    // owns that state, so the login page stays out of it.
+                    visible: auth.state !== 2 && auth.state !== 4
+                    active: auth.state !== 2 && auth.state !== 4
                     source: "pages/LoginPage.qml"
+                }
+
+                StartupSplash {
+                    anchors.fill: parent
+                    visible: auth.state === 4
                 }
 
                 QueuePanel {

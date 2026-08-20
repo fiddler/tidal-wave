@@ -148,6 +148,7 @@ qt_add_qml_module(tidal-wave
         qml/components/HorizontalSection.qml
         qml/components/PageHeader.qml
         qml/components/LoadingOverlay.qml
+        qml/components/StartupSplash.qml
         qml/components/ContextMenu.qml
         qml/components/SearchBar.qml
         qml/components/VolumeSlider.qml

@@ -14,7 +14,9 @@ class Auth : public QObject {
 
 public:
     // Appended, never reordered: QML compares state against the raw ints.
-    enum class State { LoggedOut, PendingDevice, LoggedIn, PendingPkce };
+    // Restoring means startup is still checking the saved tokens. It is not
+    // LoggedOut: QML shows the splash for it, not the login page.
+    enum class State { LoggedOut, PendingDevice, LoggedIn, PendingPkce, Restoring };
     Q_ENUM(State)
 
     explicit Auth(TidalApi *api, QObject *parent = nullptr);
