@@ -638,10 +638,14 @@ ApplicationWindow {
         // Prepared on press so the drag has a target, but not shown yet: the
         // ghost only becomes visible once the press turns into a real drag,
         // otherwise a plain click or a double click flashes it.
-        function acquire(tracks, kind) {
+        // The ghost is shared, so every borrower names itself: a row that
+        // never saw its own release — a press that only raised the window,
+        // say — must not tear down a drag some other row has since started.
+        function acquire(tracks, kind, owner) {
             if (!tracks || tracks.length === 0) return null
             ghost.payload = tracks
             ghost.kind    = kind
+            ghost.owner   = owner
             return ghost
         }
         // Publish the state before the ghost goes live: showing it sets
@@ -655,14 +659,20 @@ ApplicationWindow {
         // whatever target is under the cursor, while merely clearing active
         // cancels it. Releasing the mouse must therefore call this, or no drop
         // is ever delivered.
-        function drop() { if (ghost.visible) ghost.Drag.drop() }
-        // The single place a drag ends. Owning both halves here means a row
-        // that gets recycled mid-drag — which ListView does freely once the
-        // list scrolls — cannot leave the state stuck on.
-        function release() {
+        function drop(owner) {
+            if (owner && ghost.owner !== owner) return
+            if (ghost.visible) ghost.Drag.drop()
+        }
+        // The single place a drag ends. The source row pins itself as the
+        // list's current item so ordinary scrolling cannot recycle it, but a
+        // model reset or leaving the page still destroys it mid-drag — owning
+        // both halves here is what keeps that from leaving the state stuck on.
+        function release(owner) {
+            if (owner && ghost.owner !== owner) return
             ghost.visible = false
             ghost.payload = []
             ghost.kind    = ""
+            ghost.owner   = null
             DragState.end()
         }
 
@@ -674,6 +684,7 @@ ApplicationWindow {
 
             property var    payload: []
             property string kind: ""
+            property Item   owner: null   // the row that borrowed the ghost
 
             // Reported so targets can react to proximity, not just contact.
             onXChanged: DragState.px = x

@@ -93,16 +93,31 @@ Item {
     property Item dragProxy: null
     property bool didDrag: false          // true once a press became a drag
 
+    // The layer is looked up once, on press, and remembered. Teardown can run
+    // while the row itself is being destroyed — and by then `Window.window` is
+    // already null, so every path that reached for it there threw instead of
+    // releasing, leaving the ghost and the global drag flag stuck on for good.
+    property Item dragLayer: null
+
     // The proxy is prepared on press because MouseArea needs a drag.target
     // before the threshold is crossed. It stays invisible until the drag
     // actually starts — see onDragActiveChanged below.
     function beginDrag(mouse) {
-        var layer = Window.window.dragLayer
+        var layer = Window.window ? Window.window.dragLayer : null
         if (!layer || !root.selection) return
         var payload = root.selection.selectedTracks()
         if (payload.length === 0) return
-        root.dragProxy = layer.acquire(payload, root.isLocalTrack ? "local" : "tidal")
+        root.dragProxy = layer.acquire(payload, root.isLocalTrack ? "local" : "tidal", root)
         if (!root.dragProxy) return
+        root.dragLayer = layer
+        // A drag lives on this row's MouseArea, so the row has to outlive it.
+        // Auto-scrolling towards a distant drop target sweeps the source row
+        // out of view, and a plain delegate is destroyed once it gets there —
+        // taking the mouse grab with it, mid-drag. ListView keeps the current
+        // item instantiated wherever it has scrolled to, so claiming it is
+        // what lets a drag reach the far end of a long playlist. No list here
+        // draws a highlight or reads isCurrentItem, so this is invisible.
+        if (root.ListView.view) root.ListView.view.currentIndex = root.rowIndex
         // Pin the proxy origin to the cursor: that origin is the point drop
         // targets are hit-tested against.
         var p = mapToItem(layer, mouse.x, mouse.y)
@@ -110,26 +125,25 @@ Item {
         root.dragProxy.y = p.y
     }
 
-    // ListView destroys delegates that scroll far enough out of view. If that
-    // happens to the row holding the drag, nothing else would ever release it.
+    // A delegate can still be destroyed mid-drag — a model reload, or leaving
+    // the page. Nothing else would ever release the drag then.
     Component.onDestruction: {
-        if (root.dragProxy && Window.window && Window.window.dragLayer)
-            Window.window.dragLayer.release()
+        if (root.dragProxy && root.dragLayer) root.dragLayer.release(root)
     }
 
     function endDrag(deliver) {
-        var layer = Window.window.dragLayer
-        if (layer && root.dragProxy && deliver) layer.drop()   // deliver, then tear down
+        var layer = root.dragLayer
+        if (layer && root.dragProxy && deliver) layer.drop(root)   // deliver, then tear down
         root.dragProxy = null
-        if (layer) layer.release()
+        if (layer) layer.release(root)
     }
 
     readonly property bool dragActive: hov.drag.active
     onDragActiveChanged: {
-        var layer = Window.window.dragLayer
+        var layer = root.dragLayer
         if (!layer) return
         if (root.dragActive) { root.didDrag = true; layer.show() }
-        else                  layer.release()
+        else                  layer.release(root)
     }
 
     signal playRequested()

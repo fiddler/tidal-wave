@@ -18,7 +18,11 @@ Item {
     signal reorder(var fromIndices, int toIndex)
 
     readonly property bool armed: DragState.active && DragState.kind === root.kind
-    onArmedChanged: if (!armed) insertIndex = -1
+    // Disarming has to clear the scroll direction too. A drag that ends
+    // anywhere but on this area leaves no exit or drop event behind, and a
+    // direction left over from the last one starts the next drag scrolling
+    // the instant it arms.
+    onArmedChanged: if (!armed) { insertIndex = -1; edgeScroll.direction = 0 }
     property int insertIndex: -1
     property int edgeMargin: 36
 
