@@ -14,6 +14,11 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 > - **mpv audio engine** — replaces QMediaPlayer; gapless-quality local and
 >   DASH playback, plus lossless casting fixes
 > - **Session restore** — queue, track, position and last page survive restarts
+> - **Login survives a reboot** — a cold start whose access token expired while
+>   the app was closed now refreshes it and finishes signing in, instead of
+>   dropping to the login page while holding a valid token; a splash covers the
+>   session check, so the login page no longer flashes on every launch
+>   (upstream bug)
 > - **macOS polish** — real app bundle with icon, media keys / Now Playing
 > - **Sidebar upgrades** — now-playing indicator, track counts, sort & filter
 >   menu, playlist creation, crisper icon rendering
