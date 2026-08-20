@@ -65,10 +65,32 @@ Rectangle {
         return rest
     }
 
+    // Handing the ListView a new model array resets it to the top, which after
+    // a reorder or a removal throws the user back to track 1 of a few hundred.
+    // The edits that rewrite `tracks` in place — reorder, remove, resync —
+    // therefore put the viewport back; a fresh load still starts at the top,
+    // which is where it belongs.
+    //
+    // The list starts at `originY`, not at 0: the page header lives above the
+    // first row, so the top of a playlist is contentY === -headerHeight.
+    function restoreScroll(y) {
+        var min = tracksList.originY
+        var max = min + tracksList.contentHeight - tracksList.height
+        if (max <= min) return                     // nothing to scroll yet
+        tracksList.contentY = Math.max(min, Math.min(y, max))
+    }
+
     // Refetch without raising the loading overlay — used to resync after a
     // failed write, where the server is the only trustworthy source.
     function silentReload() {
-        bridge.fetchPlaylistTracks(playlistUuid, function(t, err) { if (!err) root.tracks = t })
+        bridge.fetchPlaylistTracks(playlistUuid, function(t, err) {
+            if (err) return
+            // Read the position here, not at call time: the user is free to
+            // scroll while the request is in flight.
+            var y = tracksList.contentY
+            root.tracks = t
+            root.restoreScroll(y)
+        })
     }
 
     // Tidal moves one row per request, each preceded by an ETag fetch, so a
@@ -76,7 +98,9 @@ Rectangle {
     // once and reconcile in the background.
     function reorderTracks(fromIndices, toIndex) {
         if (!root.isUserPlaylist || fromIndices.length === 0) return
+        var y = tracksList.contentY
         root.tracks = root.reorderedTracks(root.tracks, fromIndices, toIndex)
+        root.restoreScroll(y)
         SyncState.begin("Syncing playlist changes…")
 
         // Walk bottom-up so the indices of the rows still to move stay valid.
@@ -333,7 +357,9 @@ Rectangle {
                     if (ok) {
                         var arr = root.tracks.slice()
                         arr.splice(itemIndex, 1)
+                        var y = tracksList.contentY
                         root.tracks = arr
+                        root.restoreScroll(y)
                     }
                 })
             }

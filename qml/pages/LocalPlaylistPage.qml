@@ -30,11 +30,23 @@ Rectangle {
         function onTracksChanged()    { root.reload() }
     }
 
+    // Any library change refreshes the whole list, and handing the ListView a
+    // new model array resets it to the top — which after a reorder throws the
+    // user back to track 1. Put the viewport back where it was.
+    //
+    // The list starts at `originY`, not at 0: the page header lives above the
+    // first row, so the top of a playlist is contentY === -headerHeight. On
+    // the first load there is nothing to restore yet, and the guard leaves the
+    // view where ListView put it.
     function reload() {
         if (localPlaylistId <= 0) return
         var meta = library.playlist(localPlaylistId)
         if (meta && meta.title !== undefined) root.playlistTitle = meta.title
+        var y = tracksList.contentY
         root.tracks = library.playlistTracks(localPlaylistId)
+        var min = tracksList.originY
+        var max = min + tracksList.contentHeight - tracksList.height
+        if (max > min) tracksList.contentY = Math.max(min, Math.min(y, max))
     }
 
     function playFrom(list, i) {
