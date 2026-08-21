@@ -93,24 +93,53 @@ Rectangle {
         })
     }
 
-    // Tidal moves one row per request, each preceded by an ETag fetch, so a
-    // drag would otherwise freeze the list for seconds. Show the result at
-    // once and reconcile in the background.
+    // Tidal moves one row per request, so a multi-row drag becomes a run of
+    // single moves — and every one of them shifts the rows around it, which
+    // makes the indices the drag reported stale from the second request on.
+    // Plan the whole run against a copy of the list instead: each moved row
+    // is looked up where it is *now* and dropped straight after the row that
+    // precedes it in the finished block, so the block lands intact.
+    function plannedMoves(count, fromIndices, toIndex) {
+        var sel = []
+        var seen = {}
+        var raw = fromIndices.slice().sort(function(a, b) { return a - b })
+        for (var r = 0; r < raw.length; r++) {
+            var idx = raw[r]
+            if (idx >= 0 && idx < count && !seen[idx]) { seen[idx] = true; sel.push(idx) }
+        }
+        var cur = []
+        for (var i = 0; i < count; i++) cur.push(i)
+        // The row the block has to follow: the last one above the drop point
+        // that is not itself moving. Below the first row there is none.
+        var anchor = toIndex - 1
+        while (anchor >= 0 && seen[anchor]) anchor--
+        var moves = []
+        for (var j = 0; j < sel.length; j++) {
+            var from = cur.indexOf(sel[j])
+            cur.splice(from, 1)
+            var to = anchor < 0 ? 0 : cur.indexOf(anchor) + 1
+            cur.splice(to, 0, sel[j])
+            if (from !== to) moves.push({ from: from, to: to })
+            anchor = sel[j]
+        }
+        return moves
+    }
+
+    // Each move is preceded by an ETag fetch, so a drag would otherwise freeze
+    // the list for seconds. Show the result at once and reconcile in the
+    // background.
     function reorderTracks(fromIndices, toIndex) {
         if (!root.isUserPlaylist || fromIndices.length === 0) return
+        var moves = root.plannedMoves(root.tracks.length, fromIndices, toIndex)
         var y = tracksList.contentY
         root.tracks = root.reorderedTracks(root.tracks, fromIndices, toIndex)
         root.restoreScroll(y)
+        if (moves.length === 0) return          // dropped where it already was
         SyncState.begin("Syncing playlist changes…")
 
-        // Walk bottom-up so the indices of the rows still to move stay valid.
-        var ordered = fromIndices.slice().sort(function(a, b) { return a - b })
-        var step = function(k, insertAt) {
-            if (k < 0) { SyncState.end(); return }
-            var from = ordered[k]
-            var to = from < insertAt ? insertAt - 1 : insertAt
-            if (from === to) { step(k - 1, insertAt); return }
-            bridge.moveTrackInPlaylist(root.playlistUuid, from, to, function(ok) {
+        var step = function(k) {
+            if (k >= moves.length) { SyncState.end(); return }
+            bridge.moveTrackInPlaylist(root.playlistUuid, moves[k].from, moves[k].to, function(ok) {
                 if (!ok) {
                     // Part of the move may have landed, so take the server's
                     // word for the order rather than assuming the old one.
@@ -119,10 +148,10 @@ Rectangle {
                     root.silentReload()
                     return
                 }
-                step(k - 1, to)
+                step(k + 1)
             })
         }
-        step(ordered.length - 1, toIndex)
+        step(0)
     }
 
     function loadPlaylist() {
