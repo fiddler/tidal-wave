@@ -13,6 +13,10 @@ class TidalApi : public QObject {
 public:
     using JsonCallback = std::function<void(QJsonObject, QString /*error*/)>;
     using RawCallback  = std::function<void(QByteArray, QString /*error*/)>;
+    // Same as JsonCallback plus the status the reply carried. Status 0 means
+    // the request never reached Tidal at all — offline, blocked, DNS — which
+    // says nothing about the credentials it was sent with.
+    using JsonStatusCallback = std::function<void(QJsonObject, QString /*error*/, int /*httpStatus*/)>;
 
     explicit TidalApi(QObject *parent = nullptr);
 
@@ -25,6 +29,10 @@ public:
     void post(const QString &endpoint, const QByteArray &body,
               const QMap<QString,QString> &extraHeaders, JsonCallback cb);
     void postForm(const QString &endpoint, const QUrlQuery &form, JsonCallback cb);
+    // Status-carrying variants, for callers that must tell "Tidal said no"
+    // from "Tidal was never reached".
+    void getStatus(const QString &endpoint, const QUrlQuery &params, JsonStatusCallback cb);
+    void postFormStatus(const QString &endpoint, const QUrlQuery &form, JsonStatusCallback cb);
     // POST against the authenticated API host (api.tidal.com), unlike post()/postForm()
     // which target the OAuth host (auth.tidal.com) and deliberately omit auth headers.
     void postApiForm(const QString &endpoint, const QUrlQuery &form, JsonCallback cb);
@@ -43,4 +51,6 @@ private:
     QString m_countryCode;
 
     QNetworkRequest makeRequest(const QUrl &url);
+    void postStatus(const QString &endpoint, const QByteArray &body,
+                    const QMap<QString,QString> &extraHeaders, JsonStatusCallback cb);
 };

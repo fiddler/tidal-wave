@@ -137,6 +137,7 @@ qt_add_qml_module(tidal-wave
         qml/components/TrackSelection.qml
         qml/components/DragScrollEdge.qml
         qml/components/ReorderDropArea.qml
+        qml/components/OfflineNotice.qml
         qml/components/SyncIndicator.qml
         qml/components/EqualizerBars.qml
         qml/components/SyncState.qml

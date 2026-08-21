@@ -66,6 +66,11 @@ public:
     // Recently played
     Q_INVOKABLE void fetchRecentlyPlayed(QJSValue cb);
 
+    // Runs the favorites/playlists paging again from scratch. Normally that
+    // follows the user id changing; a session held through an outage keeps the
+    // same id, so recovery has to ask for it.
+    void reloadUserData() { loadFavoriteTrackIds(); }
+
     Q_INVOKABLE QVariantList searchFavoriteTracks(const QString &query) const;
     Q_INVOKABLE QVariantList searchFavoriteAlbums(const QString &query) const;
     Q_INVOKABLE QVariantList searchFavoriteArtists(const QString &query) const;
@@ -105,8 +110,10 @@ private:
     // Bumped each time loadFavoriteTrackIds() restarts paging; in-flight
     // callbacks from a superseded load compare against it and bail, so two
     // overlapping load chains can't both re-append page 0 (was duplicating the
-    // top liked song).
-    int             m_favTracksLoadGen = 0;
+    // top liked song). All four chains — tracks, albums, artists, playlists —
+    // share it: reloadUserData() can restart them while the previous attempt,
+    // the one that failed offline, still has a request out.
+    int             m_favLoadGen = 0;
 
     QList<Track>    m_favoriteTracks;
     QList<Album>    m_favoriteAlbums;

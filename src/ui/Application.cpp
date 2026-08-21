@@ -222,6 +222,13 @@ int Application::run(int argc, char **argv) {
         m_client->setUserId(m_auth->userId());
     });
 
+    // A session held through an outage comes up with the same user id it had
+    // before, so setUserId() stays quiet and the favourites/playlists paging —
+    // which failed while there was no network — never restarts on its own.
+    connect(m_auth, &Auth::sessionRecovered, this, [this]() {
+        m_bridge->reloadUserData();
+    });
+
     m_auth->loadCredentials();
 
 #ifdef Q_OS_MACOS

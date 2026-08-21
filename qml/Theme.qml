@@ -13,6 +13,9 @@ QtObject {
     readonly property color textSec:     "#A0A0A0"
     readonly property color textDim:     "#555555"
     readonly property color red:         "#FF4D4D"
+    // Warning, not failure: the offline notice, where nothing is broken and
+    // nothing is lost.
+    readonly property color amber:       "#E8A13A"
     readonly property color green:       "#1DB954"
     readonly property int   radius:      8
     readonly property int   radiusLg:    12

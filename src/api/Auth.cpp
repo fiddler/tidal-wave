@@ -20,6 +20,102 @@ Auth::Auth(TidalApi *api, QObject *parent)
     m_refreshTimer = new QTimer(this);
     m_refreshTimer->setSingleShot(true);
     connect(m_refreshTimer, &QTimer::timeout, this, &Auth::refreshAccessToken);
+
+    m_retryTimer = new QTimer(this);
+    m_retryTimer->setSingleShot(true);
+    connect(m_retryTimer, &QTimer::timeout, this, &Auth::retrySession);
+}
+
+// The startup check is held off, not failed, while the network is missing;
+// these bound how often it tries again.
+static constexpr int kRetryFirstMs = 15 * 1000;
+static constexpr int kRetryMaxMs   = 5 * 60 * 1000;
+
+// 400 is what the token endpoint answers an invalid_grant with; 401/403 is
+// either endpoint refusing the token. Anything else — 0 for a request that
+// never landed, 5xx for Tidal being down, 400 from the API — is not a verdict
+// on the credentials.
+bool Auth::isGrantRejection(int httpStatus) {
+    return httpStatus == 400 || isApiRejection(httpStatus);
+}
+
+bool Auth::isApiRejection(int httpStatus) {
+    return httpStatus == 401 || httpStatus == 403;
+}
+
+// Tidal refusing the session ends the hold for real. Without this the retry
+// timer keeps firing an old refresh token underneath whatever comes next — a
+// PKCE login in progress, say — and the next hold starts at the backoff this
+// one had reached.
+void Auth::endHold() {
+    m_retryTimer->stop();
+    m_retryDelayMs = 0;
+    setOffline(false);
+}
+
+void Auth::setOffline(bool v) {
+    if (m_offline == v) return;
+    m_offline = v;
+    emit offlineChanged();
+}
+
+void Auth::retryNow() {
+    if (m_accessToken.isEmpty() && m_refreshToken.isEmpty()) return;
+    m_retryTimer->stop();
+    m_retryDelayMs = 0;                 // asked for by hand: start over at 15s
+    if (!m_refreshToken.isEmpty() && QDateTime::currentDateTime() >= m_tokenExpiry)
+        refreshAccessToken();
+    else
+        fetchSession();
+}
+
+// Saved credentials that could not be checked are still the best thing we have:
+// the stored identity is enough to run the app on cached and pinned content,
+// and the check picks up again once the network is back. Dropping to the login
+// page instead strands a signed-in user there, holding a valid refresh token.
+void Auth::holdOffline(const QString &reason) {
+    if (m_refreshToken.isEmpty() && m_accessToken.isEmpty()) {
+        // Nothing to hold or retry with.
+        endHold();
+        emit loginFailed(reason);
+        setState(State::LoggedOut);
+        return;
+    }
+
+    setOffline(true);
+    m_retryDelayMs = m_retryDelayMs == 0 ? kRetryFirstMs
+                                         : qMin(m_retryDelayMs * 2, kRetryMaxMs);
+    m_retryTimer->start(m_retryDelayMs);
+
+    if (m_userId == 0) {
+        // Tokens, but no session ever checked — a grant that landed just as the
+        // network went. Keep them and stay on the flow's own screen: the retry,
+        // or the notice's "Try again", finishes the sign-in instead of making
+        // the user run the whole flow again. A startup check with no stored id
+        // has no screen of its own, so that one falls back to the login page,
+        // where the same notice offers the retry.
+        emit loginFailed(reason);
+        if (m_state == State::Restoring) setState(State::LoggedOut);
+        return;
+    }
+
+    m_api->setAccessToken(m_accessToken);
+    m_api->setCountryCode(m_countryCode);
+
+    if (m_state != State::LoggedIn) {
+        emit loginSucceeded();
+        setState(State::LoggedIn);
+    }
+}
+
+void Auth::retrySession() {
+    // Only a session actually being held retries, and never underneath a user
+    // who has gone back to the login page — "Try again" drives that one.
+    if (!m_offline || m_state == State::LoggedOut) return;
+    if (QDateTime::currentDateTime() >= m_tokenExpiry && !m_refreshToken.isEmpty())
+        refreshAccessToken();
+    else
+        fetchSession();
 }
 
 void Auth::setState(State s) {
@@ -30,6 +126,9 @@ void Auth::setState(State s) {
 
 void Auth::startDeviceFlow() {
     if (m_state == State::PendingDevice) return;
+    // Starting over drops any held session: its retry would otherwise fire the
+    // old grant's tokens into the middle of this one.
+    endHold();
     setState(State::PendingDevice);
 
     QUrlQuery form;
@@ -63,6 +162,8 @@ QString Auth::decodeCreds(const char *a, const char *b) {
 
 void Auth::startPkceFlow() {
     if (m_state == State::PendingPkce) return;
+    // As in startDeviceFlow(): a new login never inherits a held retry.
+    endHold();
 
     // RFC 7636 S256: 32 random bytes, base64url, no padding.
     QByteArray raw(32, Qt::Uninitialized);
@@ -142,6 +243,11 @@ void Auth::submitPkceRedirect(const QString &redirectUrl) {
 
 void Auth::cancelDeviceFlow() {
     m_pollTimer->stop();
+    // Cancel means a fresh start, so the hold and the tokens of the grant that
+    // was being held both go.
+    endHold();
+    m_accessToken.clear();
+    m_refreshToken.clear();
     m_deviceCode.clear();
     m_userCode.clear();
     m_verificationUri.clear();
@@ -197,12 +303,17 @@ void Auth::refreshAccessToken() {
     form.addQueryItem("client_id",     m_isPkce ? pkceClientId()     : QString::fromLatin1(kClientId));
     form.addQueryItem("client_secret", m_isPkce ? pkceClientSecret() : QString::fromLatin1(kClientSecret));
 
-    m_api->postForm("oauth2/token", form, [this](QJsonObject obj, QString err) {
+    m_api->postFormStatus("oauth2/token", form, [this](QJsonObject obj, QString err, int status) {
         if (!err.isEmpty()) {
+            // Tidal turning the grant down ends the session; never reaching
+            // Tidal does not.
+            if (!isGrantRejection(status)) { holdOffline(err); return; }
+            endHold();
             emit sessionExpired();
             setState(State::LoggedOut);
             return;
         }
+        m_retryDelayMs = 0;
         m_accessToken = obj["access_token"].toString();
         if (obj.contains("refresh_token"))
             m_refreshToken = obj["refresh_token"].toString();
@@ -214,7 +325,11 @@ void Auth::refreshAccessToken() {
         // still Restoring. fetchSession() fills those in, schedules the next
         // refresh and flips the state to LoggedIn; without it the app sits on
         // the login page holding a perfectly good token.
-        if (m_state != State::LoggedIn) {
+        // m_offline as well as the state: a session held through an outage
+        // is already LoggedIn but was never checked, so its identity and its
+        // user-scoped data are still missing. Only fetchSession() fills those
+        // in and reports the recovery.
+        if (m_state != State::LoggedIn || m_offline) {
             fetchSession();
             return;
         }
@@ -225,12 +340,19 @@ void Auth::refreshAccessToken() {
 }
 
 void Auth::fetchSession() {
-    m_api->get("sessions", {}, [this](QJsonObject obj, QString err) {
+    // Whatever flow got us here is over; a poll still running would hand a
+    // second token in behind this session.
+    m_pollTimer->stop();
+    m_api->getStatus("sessions", {}, [this](QJsonObject obj, QString err, int status) {
         if (!err.isEmpty()) {
+            if (!isApiRejection(status)) { holdOffline(err); return; }
+            endHold();
             emit loginFailed(err);
             setState(State::LoggedOut);
             return;
         }
+        m_retryDelayMs = 0;
+        m_retryTimer->stop();
         m_userId      = obj["userId"].toVariant().toLongLong();
         m_countryCode = obj["countryCode"].toString();
         m_api->setCountryCode(m_countryCode);
@@ -261,6 +383,10 @@ void Auth::fetchSession() {
         // which requires TidalClient::userId to already be set via this signal.
         emit loginSucceeded();
         setState(State::LoggedIn);
+        if (m_offline) {
+            setOffline(false);
+            emit sessionRecovered();
+        }
     });
 }
 
@@ -328,6 +454,7 @@ void Auth::clearCredentials() {
 void Auth::logout() {
     m_pollTimer->stop();
     m_refreshTimer->stop();
+    endHold();
     m_accessToken.clear();
     m_refreshToken.clear();
     m_deviceCode.clear();

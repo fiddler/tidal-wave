@@ -9,6 +9,10 @@ class Auth : public QObject {
     Q_PROPERTY(QString userCode READ userCode NOTIFY userCodeChanged)
     Q_PROPERTY(QString verificationUrl READ verificationUrl NOTIFY userCodeChanged)
     Q_PROPERTY(QString username READ username NOTIFY usernameChanged)
+    // True while the last attempt to reach Tidal failed for want of a network,
+    // as opposed to Tidal turning the credentials down. The window says so and
+    // offers a retry instead of quietly rendering empty pages.
+    Q_PROPERTY(bool offline READ offline NOTIFY offlineChanged)
     // userId lands together with the login state flip, so stateChanged covers it.
     Q_PROPERTY(qint64 userId READ userId NOTIFY stateChanged)
 
@@ -29,6 +33,7 @@ public:
     QString refreshToken()    const { return m_refreshToken; }
     qint64  userId()          const { return m_userId; }
     QString countryCode()     const { return m_countryCode; }
+    bool    offline()         const { return m_offline; }
 
     // Attempt device flow login. Tidal caps this client at 320 kbps AAC, so it
     // is kept only as a fallback — prefer startPkceFlow().
@@ -39,6 +44,9 @@ public:
     // submitPkceRedirect().
     Q_INVOKABLE void startPkceFlow();
     Q_INVOKABLE void submitPkceRedirect(const QString &redirectUrl);
+    // Check the session again right now, dropping whatever backoff the
+    // automatic retry had reached. Bound to the notice's "Try again".
+    Q_INVOKABLE void retryNow();
     // Cancel pending auth (either flow)
     Q_INVOKABLE void cancelDeviceFlow();
     // Log out
@@ -54,20 +62,40 @@ signals:
     void loginSucceeded();
     void loginFailed(const QString &reason);
     void sessionExpired();
+    void offlineChanged();
+    // A session that started without a network has finally checked out. The
+    // first load of everything user-scoped failed, so listeners run it again.
+    void sessionRecovered();
 
 private slots:
     void pollForToken();
     void refreshAccessToken();
+    // Re-runs the startup check after it was held off for want of a network.
+    void retrySession();
 
 private:
     void setState(State s);
     void fetchSession();
+    // True when Tidal itself turned the credentials down, as opposed to the
+    // request never getting an answer. The two endpoints do not speak the same
+    // dialect: 400 is the token endpoint's invalid_grant, while a 400 from the
+    // API is a malformed request and says nothing about the token.
+    static bool isGrantRejection(int httpStatus);
+    static bool isApiRejection(int httpStatus);
+    // Tears down the offline hold when Tidal has actually refused the session.
+    void endHold();
+    void setOffline(bool v);
+    // Keeps a session that could not be checked because there was no network.
+    void holdOffline(const QString &reason);
     void saveCredentials();
     void clearCredentials();
 
     TidalApi  *m_api;
     QTimer    *m_pollTimer;
     QTimer    *m_refreshTimer;
+    QTimer    *m_retryTimer;
+    int        m_retryDelayMs = 0;
+    bool       m_offline      = false;
     State      m_state = State::LoggedOut;
 
     QString m_deviceCode;

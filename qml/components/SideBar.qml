@@ -673,6 +673,10 @@ Rectangle {
         function onStateChanged(state) {
             if (state === 2) loadPlaylists()
         }
+        // A launch without a network reaches the app with an unchecked session,
+        // so this first load comes back empty. Run it again once the session
+        // checks out for real.
+        function onSessionRecovered() { loadPlaylists() }
     }
 
     Connections {

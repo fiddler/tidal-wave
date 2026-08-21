@@ -295,6 +295,18 @@ ApplicationWindow {
                 root.restoreNavState()
             }
         }
+        // Whatever page came up while the session was still unchecked rendered
+        // from cache or from nothing at all. A detail page is rebuilt by the
+        // re-navigation below; home/search/collection keep their loaded item
+        // across one, so Home is asked to load again directly. Collection
+        // follows the bridge's favourites, which Application reloads on this
+        // same signal.
+        function onSessionRecovered() {
+            var loader = root.getLoader(root.currentPage)
+            var item = loader && loader.status === Loader.Ready ? loader.item : null
+            if (item && typeof item.loadContent === "function") item.loadContent()
+            root.navigate(root.currentPage, root._currentNavParams)
+        }
     }
 
     // ─── Keyboard shortcuts ────────────────────────────
@@ -611,12 +623,23 @@ ApplicationWindow {
         }
     }
 
+    // No network to check the session against: say so, and offer the retry.
+    OfflineNotice {
+        id: offlineNotice
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: 24
+        anchors.bottomMargin: 104
+        z: 9001
+    }
+
     // Background playlist writes report here rather than blocking the page.
     SyncIndicator {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: 24
-        anchors.bottomMargin: 104
+        // Stacks above the offline notice when both are up.
+        anchors.bottomMargin: offlineNotice.visible ? 104 + offlineNotice.height + 12 : 104
         z: 9000
     }
 

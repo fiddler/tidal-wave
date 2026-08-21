@@ -511,7 +511,7 @@ QVariantList TidalBridge::searchFavoritePlaylists(const QString &query) const {
 void TidalBridge::loadFavoriteTrackIds() {
     // Invalidate any in-flight tracks-paging chain so its stale callbacks stop
     // appending after this reset (otherwise the old chain re-adds page 0).
-    ++m_favTracksLoadGen;
+    ++m_favLoadGen;
 
     m_favoriteTrackIds.clear();
     m_favoriteTracks.clear();
@@ -527,10 +527,10 @@ void TidalBridge::loadFavoriteTrackIds() {
 
 void TidalBridge::loadNextFavoriteTracksPage(int offset) {
     if (m_client->userId() == 0) return;
-    const int gen = m_favTracksLoadGen;
+    const int gen = m_favLoadGen;
     m_client->fetchFavoriteTracks([this, offset, gen](QList<Track> tracks, QString err) {
         // A newer load has superseded this chain — stop before touching state.
-        if (gen != m_favTracksLoadGen) return;
+        if (gen != m_favLoadGen) return;
         if (!err.isEmpty() || tracks.isEmpty()) {
             std::reverse(m_favoriteTracks.begin(), m_favoriteTracks.end());
             emit favoriteTracksChanged();
@@ -552,7 +552,10 @@ void TidalBridge::loadNextFavoriteTracksPage(int offset) {
 
 void TidalBridge::loadNextFavoriteAlbumsPage(int offset) {
     if (m_client->userId() == 0) return;
-    m_client->fetchFavoriteAlbums([this, offset](QList<Album> albums, QString err) {
+    const int gen = m_favLoadGen;
+    m_client->fetchFavoriteAlbums([this, offset, gen](QList<Album> albums, QString err) {
+        // A newer load has superseded this chain — stop before touching state.
+        if (gen != m_favLoadGen) return;
         if (!err.isEmpty() || albums.isEmpty()) {
             emit favoriteAlbumsChanged();
             return;
@@ -567,7 +570,10 @@ void TidalBridge::loadNextFavoriteAlbumsPage(int offset) {
 
 void TidalBridge::loadNextFavoriteArtistsPage(int offset) {
     if (m_client->userId() == 0) return;
-    m_client->fetchFavoriteArtists([this, offset](QList<Artist> artists, QString err) {
+    const int gen = m_favLoadGen;
+    m_client->fetchFavoriteArtists([this, offset, gen](QList<Artist> artists, QString err) {
+        // A newer load has superseded this chain — stop before touching state.
+        if (gen != m_favLoadGen) return;
         if (!err.isEmpty() || artists.isEmpty()) {
             emit favoriteArtistsChanged();
             return;
@@ -582,7 +588,10 @@ void TidalBridge::loadNextFavoriteArtistsPage(int offset) {
 
 void TidalBridge::loadNextUserPlaylistsPage(int offset) {
     if (m_client->userId() == 0) return;
-    m_client->fetchUserPlaylists([this, offset](QList<Playlist> playlists, QString err) {
+    const int gen = m_favLoadGen;
+    m_client->fetchUserPlaylists([this, offset, gen](QList<Playlist> playlists, QString err) {
+        // A newer load has superseded this chain — stop before touching state.
+        if (gen != m_favLoadGen) return;
         if (!err.isEmpty() || playlists.isEmpty()) {
             emit favoritePlaylistsChanged();
             return;

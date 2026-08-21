@@ -21,7 +21,16 @@ QNetworkRequest TidalApi::makeRequest(const QUrl &url) {
     return req;
 }
 
+// The status a finished reply carries, or 0 when it never got one.
+static int httpStatusOf(QNetworkReply *reply) {
+    return reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+}
+
 void TidalApi::get(const QString &endpoint, const QUrlQuery &params, JsonCallback cb) {
+    getStatus(endpoint, params, [cb](QJsonObject obj, QString err, int) { cb(obj, err); });
+}
+
+void TidalApi::getStatus(const QString &endpoint, const QUrlQuery &params, JsonStatusCallback cb) {
     QUrl url(kApiBase + endpoint);
     QUrlQuery q = params;
     if (!m_countryCode.isEmpty()) q.addQueryItem("countryCode", m_countryCode);
@@ -30,22 +39,29 @@ void TidalApi::get(const QString &endpoint, const QUrlQuery &params, JsonCallbac
     auto *reply = m_nam->get(makeRequest(url));
     connect(reply, &QNetworkReply::finished, this, [reply, cb]() {
         reply->deleteLater();
+        const int status = httpStatusOf(reply);
         if (reply->error() != QNetworkReply::NoError) {
-            cb({}, reply->errorString());
+            cb({}, reply->errorString(), status);
             return;
         }
         QJsonParseError err;
         auto doc = QJsonDocument::fromJson(reply->readAll(), &err);
         if (err.error != QJsonParseError::NoError) {
-            cb({}, err.errorString());
+            cb({}, err.errorString(), status);
             return;
         }
-        cb(doc.object(), {});
+        cb(doc.object(), {}, status);
     });
 }
 
 void TidalApi::post(const QString &endpoint, const QByteArray &body,
                     const QMap<QString,QString> &extraHeaders, JsonCallback cb) {
+    postStatus(endpoint, body, extraHeaders,
+        [cb](QJsonObject obj, QString err, int) { cb(obj, err); });
+}
+
+void TidalApi::postStatus(const QString &endpoint, const QByteArray &body,
+                          const QMap<QString,QString> &extraHeaders, JsonStatusCallback cb) {
     QUrl url(kAuthBase + endpoint);
     // Auth endpoints must NOT receive X-Tidal-Token or Authorization headers
     QNetworkRequest req(url);
@@ -58,23 +74,34 @@ void TidalApi::post(const QString &endpoint, const QByteArray &body,
     auto *reply = m_nam->post(req, body);
     connect(reply, &QNetworkReply::finished, this, [reply, cb]() {
         reply->deleteLater();
+        const int status = httpStatusOf(reply);
         QByteArray data = reply->readAll();
+        // A request that never landed has no body to read a reason out of, so
+        // report the transport failure rather than a JSON parse error.
+        if (data.isEmpty() && reply->error() != QNetworkReply::NoError) {
+            cb({}, reply->errorString(), status);
+            return;
+        }
         QJsonParseError err;
         auto doc = QJsonDocument::fromJson(data, &err);
         if (err.error != QJsonParseError::NoError) {
-            cb({}, err.errorString());
+            cb({}, err.errorString(), status);
             return;
         }
         auto obj = doc.object();
         if (obj.contains("error"))
-            cb(obj, obj["error_description"].toString(obj["error"].toString()));
+            cb(obj, obj["error_description"].toString(obj["error"].toString()), status);
         else
-            cb(obj, {});
+            cb(obj, {}, status);
     });
 }
 
 void TidalApi::postForm(const QString &endpoint, const QUrlQuery &form, JsonCallback cb) {
     post(endpoint, form.toString(QUrl::FullyEncoded).toUtf8(), {}, cb);
+}
+
+void TidalApi::postFormStatus(const QString &endpoint, const QUrlQuery &form, JsonStatusCallback cb) {
+    postStatus(endpoint, form.toString(QUrl::FullyEncoded).toUtf8(), {}, cb);
 }
 
 void TidalApi::postApiForm(const QString &endpoint, const QUrlQuery &form, JsonCallback cb) {
