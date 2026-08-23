@@ -40,9 +40,11 @@ Rectangle {
         var items = []
         for (var i = 0; i < Math.min(trackList.length, 12); i++) {
             var t = trackList[i]
+            // The whole track rides along: a local file has no album page to
+            // open, so clicking its card plays it instead.
             items.push({ id: t.id, title: t.title, subtitle: t.artists,
                          coverUrl: t.coverUrl || "",
-                         albumId: t.albumId || 0, type: "track" })
+                         albumId: t.albumId || 0, track: t, type: "track" })
         }
         recentlyPlayed = items
     }
@@ -149,12 +151,16 @@ Rectangle {
                 onItemClicked: (idx, item) => {
                     if (item.albumId > 0)
                         navigateTo("album", { albumId: item.albumId })
+                    else if (item.track)
+                        player.playTracks([item.track], 0)
                 }
                 onItemPlayClicked: (idx, item) => {
                     if (item.albumId > 0) {
                         bridge.fetchAlbumTracks(item.albumId, function(tracks, err) {
                             if (!err && tracks.length > 0) player.playTracks(tracks, 0)
                         })
+                    } else if (item.track) {
+                        player.playTracks([item.track], 0)
                     }
                 }
             }

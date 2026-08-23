@@ -9,7 +9,10 @@ Rectangle {
     color: Theme.bg
 
     property var track: player.currentTrack  // QVariantMap
-    property bool hasTrack: track && track.id > 0
+    // Local library tracks carry a negative id, so this cannot test for a
+    // positive one — the page showed "—" and no art through every local file.
+    property bool hasTrack: track && track.id !== 0 && track.id !== undefined
+    readonly property bool isLocalTrack: !!(track && track.localPath)
     property bool isLiked: false
     property bool showLyrics: false
     // Download state for the current track: "idle" | "busy" | "done" | "error"
@@ -68,7 +71,8 @@ Rectangle {
     }
 
     function loadLyrics() {
-        if (!hasTrack || track.id <= 0) return
+        if (!hasTrack) return
+        if (isLocalTrack) { lyricsState = "unavailable"; return }
         lyricsState = "loading"
         bridge.fetchLyrics(track.id, function(result, err) {
             if (err) { lyricsState = "unavailable"; return }
@@ -143,7 +147,7 @@ Rectangle {
     }
     Timer { id: npDlReset; interval: 3000; onTriggered: root.dlState = "idle" }
     function updateLikedState() {
-        isLiked = (hasTrack && track.id > 0)
+        isLiked = (hasTrack && !isLocalTrack)
             ? bridge.isTrackFavorite(track.id)
             : false
     }
@@ -400,7 +404,7 @@ Rectangle {
                     // Download button — always visible while a track is playing
                     Item {
                         id: npDownloadBtn
-                        visible: root.hasTrack
+                        visible: root.hasTrack && !root.isLocalTrack
                         Layout.preferredWidth: 44
                         Layout.preferredHeight: 44
                         activeFocusOnTab: root.dlState !== "busy"
@@ -449,7 +453,7 @@ Rectangle {
 
                     CtrlBtn {
                         id: npLikeBtn
-                        visible: root.hasTrack
+                        visible: root.hasTrack && !root.isLocalTrack
                         icon: root.isLiked ? "heart-filled" : "heart"
                         size: 24
                         active: root.isLiked

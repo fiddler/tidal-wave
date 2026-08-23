@@ -14,7 +14,11 @@ Rectangle {
     signal showNowPlaying()
 
     property var track: player.currentTrack  // QVariantMap
-    property bool hasTrack: track && track.id > 0
+    // Local library tracks carry a negative id (never a valid Tidal one), so
+    // this cannot test for a positive id: the bar read "No track playing", with
+    // no cover, through every local file.
+    property bool hasTrack: track && track.id !== 0 && track.id !== undefined
+    readonly property bool isLocalTrack: !!(track && track.localPath)
     property bool isLiked: false
 
     Connections {
@@ -26,7 +30,7 @@ Rectangle {
         function onCurrentTrackChanged() { root.updateLikedState() }
     }
     function updateLikedState() {
-        isLiked = (hasTrack && track.id > 0)
+        isLiked = (hasTrack && !isLocalTrack)
             ? bridge.isTrackFavorite(track.id)
             : false
     }
@@ -91,7 +95,8 @@ Rectangle {
 
             IconButton {
                 id: likeBtn
-                visible: root.hasTrack
+                // Liking posts the track id to Tidal, which a local file has none of.
+                visible: root.hasTrack && !root.isLocalTrack
                 icon: root.isLiked ? "heart-filled" : "heart"
                 size: 16
                 iconColor: root.isLiked ? Theme.accent : Theme.textSec
