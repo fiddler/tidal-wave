@@ -31,6 +31,16 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 > - **Readable artist bios** — the About text keeps a comfortable line length,
 >   Tidal's own `<br/>` tags become paragraphs instead of visible markup, and
 >   the in-text links drop the bold and show a pointer cursor on hover
+> - **Live playlist counts** — dropping tracks on a playlist, or removing one,
+>   refreshes that playlist's count from Tidal instead of leaving the number
+>   frozen until the next launch; the sidebar and My Collection keep their
+>   scroll position while it updates (upstream bug)
+> - **Links where you expect them** — the player-bar artist name, the album
+>   column in every track list, and a card's title and artist line all
+>   navigate, and the pointer cursor appears only where a link exists
+> - **Local files in the player** — a local track no longer leaves the player
+>   bar and Now Playing reading "No track playing" with no art, and the
+>   Tidal-only actions (like, download, lyrics) stay hidden for it
 >
 > Upstream maintainers: every commit is scoped and conventional — cherry-pick
 > anything you like, or ask for a focused PR of any subset.
