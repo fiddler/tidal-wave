@@ -320,14 +320,45 @@ Item {
                 }
             }
 
-            // Album
+            // Album — a link to the album page for Tidal tracks. Local files
+            // have no album to open, so there it stays plain text.
             Text {
+                id: albumText
                 visible: showAlbum
                 Layout.preferredWidth: 160
                 text: root.albumTitle
-                color: root.isUnavailable ? Theme.textDim : Theme.textSec
+                color: albumText.linkHovered ? Theme.textPrimary
+                       : root.isUnavailable ? Theme.textDim : Theme.textSec
                 font.pixelSize: 13
+                font.underline: albumText.linkHovered
                 elide: Text.ElideRight
+
+                readonly property bool isLink: !root.isLocalTrack
+                                               && !!(root.trackData && root.trackData.albumId > 0)
+                // The cell is a fixed 160 wide but the name rarely fills it.
+                // Both the hit area and the hover test stop at the text, so the
+                // empty gap beside a short album name neither underlines nor
+                // swallows the press that starts a drag or selects the row.
+                readonly property real linkWidth: Math.min(implicitWidth, width)
+                // Hover is read off the row's own MouseArea rather than a
+                // hoverEnabled area here: anything that tracks hover on a child
+                // takes it away from the row, and the row highlight and the
+                // menu button both follow the row's hover.
+                readonly property bool linkHovered: {
+                    if (!isLink || text.length === 0 || !hov.hovered) return false
+                    var p = mapFromItem(hov, hov.mouseX, hov.mouseY)
+                    return p.x >= 0 && p.x <= linkWidth && p.y >= 0 && p.y <= height
+                }
+
+                MouseArea {
+                    width: albumText.linkWidth
+                    height: parent.height
+                    enabled: albumText.isLink
+                    // Disabled does not stop a MouseArea from setting the
+                    // cursor, so this has to follow isLink too.
+                    cursorShape: albumText.isLink ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: Window.window.navigate("album", { albumId: root.trackData.albumId })
+                }
             }
 
             // Duration

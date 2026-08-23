@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import TidalWave
 
 Rectangle {
@@ -71,10 +72,43 @@ Rectangle {
                     color: Theme.textPrimary; font.pixelSize: 14; font.bold: true; elide: Text.ElideRight
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.showNowPlaying() }
                 }
+                // The artist name is a link to the artist page — off for local
+                // files, which carry no Tidal artist id.
                 Text {
+                    id: artistLink
+                    readonly property bool isLink: root.hasTrack && !root.isLocalTrack
+                                                   && root.track.artistId > 0
                     Layout.fillWidth: true
                     text: hasTrack ? track.artists : ""
-                    color: Theme.textSec; font.pixelSize: 12; elide: Text.ElideRight
+                    color: isLink && artistHov.containsMouse ? Theme.textPrimary : Theme.textSec
+                    font.pixelSize: 12
+                    font.underline: isLink && artistHov.containsMouse
+                    elide: Text.ElideRight
+                    activeFocusOnTab: isLink
+                    Keys.onReturnPressed: artistLink.open()
+                    Keys.onSpacePressed:  artistLink.open()
+
+                    function open() {
+                        if (isLink) Window.window.navigate("artist", { artistId: root.track.artistId })
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent; anchors.margins: -3; radius: 4; color: "transparent"
+                        border.width: artistLink.activeFocus ? 2 : 0
+                        border.color: Theme.accent
+                    }
+                    MouseArea {
+                        id: artistHov
+                        // Only as wide as the name itself: the label stretches
+                        // across the column, and a full-width hit area would
+                        // underline empty space next to a short artist name.
+                        width: Math.min(artistLink.implicitWidth, artistLink.width)
+                        height: parent.height
+                        enabled: artistLink.isLink
+                        hoverEnabled: true
+                        cursorShape: artistLink.isLink ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: artistLink.open()
+                    }
                 }
                 Rectangle {
                     visible: hasTrack && player.audioQuality.length > 0

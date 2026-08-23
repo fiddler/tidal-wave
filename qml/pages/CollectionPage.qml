@@ -237,7 +237,9 @@ Rectangle {
                     subtitle: modelData.artists
                     coverUrl: modelData.coverUrl
                     mediaType: "album"
+                    artistId: modelData.artistId || 0
                     onClicked: navigateTo("album", { albumId: modelData.id })
+                    onSubtitleClicked: navigateTo("artist", { artistId: modelData.artistId })
                     onPlayClicked: {
                         bridge.fetchAlbumTracks(modelData.id, function(tracks, err) {
                             if (!err && tracks.length > 0) player.playTracks(tracks, 0)

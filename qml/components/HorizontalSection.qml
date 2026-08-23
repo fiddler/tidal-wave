@@ -17,6 +17,9 @@ Item {
 
     signal itemClicked(int index, var item)
     signal itemPlayClicked(int index, var item)
+    // Emitted when a card's subtitle is clicked — only fires for items that
+    // carry an artistId.
+    signal itemSubtitleClicked(int index, var item)
     signal viewAllClicked()
 
     ColumnLayout {
@@ -101,10 +104,12 @@ Item {
                     coverUrl:  modelData.coverUrl  || ""
                     title:     modelData.title     || ""
                     subtitle:  modelData.subtitle  || ""
+                    artistId:  modelData.artistId || 0
                     mediaType: root.mediaType
                     cardSize:  root.cardSize
-                    onClicked:      root.itemClicked(index, modelData)
-                    onPlayClicked:  root.itemPlayClicked(index, modelData)
+                    onClicked:         root.itemClicked(index, modelData)
+                    onPlayClicked:     root.itemPlayClicked(index, modelData)
+                    onSubtitleClicked: root.itemSubtitleClicked(index, modelData)
                 }
             }
 

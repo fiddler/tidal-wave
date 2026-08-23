@@ -178,10 +178,12 @@ Rectangle {
                     title: "Albums"
                     showViewAll: false
                     items: root.albums.map(function(a) {
-                        return { id: a.id, title: a.title, subtitle: a.artists, coverUrl: a.coverUrl }
+                        return { id: a.id, title: a.title, subtitle: a.artists,
+                                 coverUrl: a.coverUrl, artistId: a.artistId || 0 }
                     })
                     mediaType: "album"
                     onItemClicked: (i, item) => navigateTo("album", { albumId: item.id })
+                    onItemSubtitleClicked: (i, item) => navigateTo("artist", { artistId: item.artistId })
                     onItemPlayClicked: (i, item) => {
                         bridge.fetchAlbumTracks(item.id, function(tracks, err) {
                             if (!err && tracks.length > 0) player.playTracks(tracks, 0)

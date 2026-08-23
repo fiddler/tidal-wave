@@ -10,12 +10,17 @@ Item {
     property string subtitle: ""
     property string mediaType: "album"
     property int    cardSize: 160
+    // >0 turns the subtitle into a link to that artist. Cards whose subtitle
+    // is not one artist — a mix's blurb, "16 tracks", a release year — leave
+    // it at 0 and the subtitle stays plain text.
+    property int    artistId: 0
 
     width: cardSize
     height: col.height + 8
 
     signal clicked()
     signal playClicked()
+    signal subtitleClicked()
 
     activeFocusOnTab: true
     Keys.onReturnPressed: root.clicked()
@@ -96,23 +101,54 @@ Item {
             Layout.fillWidth: true
             spacing: 2
 
+            // The title opens what the cover opens.
             Text {
+                id: titleText
                 Layout.fillWidth: true
                 text: root.title
                 color: Theme.textPrimary
                 font.pixelSize: 14
                 font.bold: true
+                font.underline: titleHov.containsMouse
                 elide: Text.ElideRight
                 wrapMode: Text.NoWrap
+
+                MouseArea {
+                    id: titleHov
+                    // Only as wide as the text: the label fills the card, and a
+                    // full-width hit area would underline the gap beside a
+                    // short title.
+                    width: Math.min(titleText.implicitWidth, titleText.width)
+                    height: parent.height
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.clicked()
+                }
             }
 
             Text {
+                id: subtitleText
+                readonly property bool isLink: root.artistId > 0 && root.subtitle.length > 0
                 Layout.fillWidth: true
                 text: root.subtitle
-                color: Theme.textSec
+                color: isLink && subtitleHov.containsMouse ? Theme.textPrimary : Theme.textSec
                 font.pixelSize: 12
+                font.underline: isLink && subtitleHov.containsMouse
                 elide: Text.ElideRight
                 wrapMode: Text.NoWrap
+
+                MouseArea {
+                    id: subtitleHov
+                    width: Math.min(subtitleText.implicitWidth, subtitleText.width)
+                    height: parent.height
+                    enabled: subtitleText.isLink
+                    hoverEnabled: true
+                    // A disabled MouseArea still applies its cursorShape, so a
+                    // subtitle that links nowhere — a mix's blurb, a track
+                    // count — would offer the hand and then do nothing.
+                    cursorShape: subtitleText.isLink ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: root.subtitleClicked()
+                }
             }
         }
     }

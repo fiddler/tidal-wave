@@ -44,7 +44,8 @@ Rectangle {
             // open, so clicking its card plays it instead.
             items.push({ id: t.id, title: t.title, subtitle: t.artists,
                          coverUrl: t.coverUrl || "",
-                         albumId: t.albumId || 0, track: t, type: "track" })
+                         albumId: t.albumId || 0, artistId: t.artistId || 0,
+                         track: t, type: "track" })
         }
         recentlyPlayed = items
     }
@@ -71,7 +72,8 @@ Rectangle {
             for (var i = 0; i < Math.min(albums.length, 12); i++) {
                 var a = albums[i]
                 items.push({ id: a.id, title: a.title, subtitle: a.artists,
-                             coverUrl: a.coverUrl, type: "album" })
+                             coverUrl: a.coverUrl, artistId: a.artistId || 0,
+                             type: "album" })
             }
             recentAlbums = items
         }, 12, 0)
@@ -154,6 +156,7 @@ Rectangle {
                     else if (item.track)
                         player.playTracks([item.track], 0)
                 }
+                onItemSubtitleClicked: (idx, item) => navigateTo("artist", { artistId: item.artistId })
                 onItemPlayClicked: (idx, item) => {
                     if (item.albumId > 0) {
                         bridge.fetchAlbumTracks(item.albumId, function(tracks, err) {
@@ -174,6 +177,7 @@ Rectangle {
                 items: root.recentAlbums
                 mediaType: "album"
                 onItemClicked: (idx, item) => navigateTo("album", { albumId: item.id })
+                onItemSubtitleClicked: (idx, item) => navigateTo("artist", { artistId: item.artistId })
                 onItemPlayClicked: (idx, item) => {
                     bridge.fetchAlbumTracks(item.id, function(tracks, err) {
                         if (!err && tracks.length > 0) player.playTracks(tracks, 0)
