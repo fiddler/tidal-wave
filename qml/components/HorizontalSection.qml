@@ -74,7 +74,11 @@ Item {
         Item {
             id: rail
             Layout.fillWidth: true
-            height: cardSize + 64 + (rail.overflows ? 8 : 0)
+            // Not tied to `overflows`: contentWidth is only known once the
+            // delegates are laid out, and the rows fill asynchronously, so a
+            // height that depends on it makes the page jump after first paint.
+            // The scrollbar sits inside the list's own bottom slack anyway.
+            height: cardSize + 64
 
             readonly property real maxX: Math.max(0, hlist.contentWidth - hlist.width)
             readonly property bool overflows: maxX > 1

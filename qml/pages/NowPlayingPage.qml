@@ -70,6 +70,12 @@ Rectangle {
         return lines
     }
 
+    // The toggle that closes the lyrics pane is itself hidden once lyrics are
+    // known to be unavailable, so a pane left open over a track without them —
+    // a local file, or the next track after a skip — could not be closed and
+    // hid the cover for good.
+    onLyricsStateChanged: if (lyricsState === "unavailable") showLyrics = false
+
     function loadLyrics() {
         if (!hasTrack) return
         if (isLocalTrack) { lyricsState = "unavailable"; return }
