@@ -54,7 +54,16 @@ Rectangle {
         filteredTracks    = bridge.searchFavoriteTracks(searchPattern)
         filteredAlbums    = bridge.searchFavoriteAlbums(searchPattern)
         filteredArtists   = bridge.searchFavoriteArtists(searchPattern)
+
+        // Dropping a track on a playlist re-emits the whole list just to move
+        // one track count, and reassigning a GridView's array model sends it
+        // back to the top. Same number of playlists means the same content
+        // height, so restoring the position is safe.
+        var prevCount = filteredPlaylists.length
+        var prevY     = playlistsGrid.contentY
         filteredPlaylists = bridge.searchFavoritePlaylists(searchPattern)
+        if (filteredPlaylists.length === prevCount)
+            playlistsGrid.contentY = prevY
     }
 
     function loadMixes() {

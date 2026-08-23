@@ -654,6 +654,24 @@ Rectangle {
         else if (plPrefs.sortMode === "created")
             list.sort(function(a, b) { return (b.created || "").localeCompare(a.created || "") })
 
+        // A track dropped on a playlist re-runs this only to move one row's
+        // track count. Clearing the model there would send the sidebar back to
+        // the top and rebuild every delegate, so when the rows are the same
+        // playlists in the same order, write the fields in place instead.
+        var sameRows = playlistModel.count === list.length
+        for (var j = 0; sameRows && j < list.length; j++)
+            if (playlistModel.get(j).uuid !== list[j].uuid) sameRows = false
+
+        if (sameRows) {
+            for (var k = 0; k < list.length; k++) {
+                playlistModel.setProperty(k, "title", list[k].title)
+                playlistModel.setProperty(k, "coverUrl", list[k].coverUrl || "")
+                playlistModel.setProperty(k, "type", list[k].type || "")
+                playlistModel.setProperty(k, "numTracks", list[k].numTracks || 0)
+            }
+            return
+        }
+
         playlistModel.clear()
         for (var i = 0; i < list.length; i++) {
             playlistModel.append({

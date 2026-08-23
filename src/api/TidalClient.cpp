@@ -370,6 +370,18 @@ void TidalClient::createPlaylist(const QString &title,
         });
 }
 
+// One playlist's own metadata, track count included. Add and remove answer
+// without it, so callers that cache a playlist ask for it again afterwards.
+void TidalClient::fetchPlaylist(const QString &uuid,
+    std::function<void(Playlist, QString)> cb)
+{
+    m_api->get(QStringLiteral("playlists/%1").arg(uuid), {},
+        [cb](QJsonObject root, QString err) {
+            if (!err.isEmpty()) { cb({}, err); return; }
+            cb(Playlist::fromJson(root), {});
+        });
+}
+
 // Tidal's endpoint takes a comma-separated trackIds list, so adding many
 // tracks costs the same single request as adding one.
 void TidalClient::addTracksToPlaylist(const QString &uuid, const QList<qint64> &trackIds,

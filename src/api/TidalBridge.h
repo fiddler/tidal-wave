@@ -86,6 +86,7 @@ signals:
 private:
     void call(QJSValue &cb, const QJSValueList &args);
     void sortPlaylists(QList<Playlist> &playlists) const;
+    void refreshPlaylistMeta(const QString &uuid);
     void loadFavoriteTrackIds();
     void loadNextFavoriteTracksPage(int offset);
     void loadNextFavoriteAlbumsPage(int offset);

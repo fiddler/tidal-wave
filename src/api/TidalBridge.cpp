@@ -407,10 +407,36 @@ void TidalBridge::createPlaylist(const QString &title, QJSValue cb) {
     });
 }
 
+// Tidal answers add and remove without saying how big the playlist now is, and
+// it skips duplicates on add — so counting the ids we sent would drift. Ask for
+// the playlist itself and let the cached copy, which is where the sidebar and My
+// Collection read their track counts, follow the server.
+void TidalBridge::refreshPlaylistMeta(const QString &uuid) {
+    if (uuid.isEmpty()) return;
+    m_client->fetchPlaylist(uuid, [this, uuid](Playlist p, QString err) {
+        if (!err.isEmpty() || p.uuid.isEmpty()) {
+            // The edit itself went through; only the count is now behind, and
+            // it corrects itself on the next full load. Worth a line in the log
+            // rather than a retry.
+            qDebug() << "[TidalBridge] playlist meta refresh failed for" << uuid << err;
+            return;
+        }
+        for (int i = 0; i < m_favoritePlaylists.size(); ++i) {
+            if (m_favoritePlaylists[i].uuid != uuid) continue;
+            // Replaced in place: the sidebar order comes from the stored
+            // last-played times, not from this list's own positions.
+            m_favoritePlaylists[i] = p;
+            emit favoritePlaylistsChanged();
+            return;
+        }
+    });
+}
+
 void TidalBridge::addTracksToPlaylist(const QString &uuid, const QVariantList &trackIds, QJSValue cb) {
     QList<qint64> ids;
     for (const QVariant &v : trackIds) ids << v.toLongLong();
-    m_client->addTracksToPlaylist(uuid, ids, [this, cb](bool success) mutable {
+    m_client->addTracksToPlaylist(uuid, ids, [this, uuid, cb](bool success) mutable {
+        if (success) refreshPlaylistMeta(uuid);
         call(cb, { success });
     });
 }
@@ -422,7 +448,8 @@ void TidalBridge::moveTrackInPlaylist(const QString &uuid, int fromIndex, int to
 }
 
 void TidalBridge::removeTrackFromPlaylist(const QString &uuid, int itemIndex, QJSValue cb) {
-    m_client->removeTrackFromPlaylist(uuid, itemIndex, [this, cb](bool success) mutable {
+    m_client->removeTrackFromPlaylist(uuid, itemIndex, [this, uuid, cb](bool success) mutable {
+        if (success) refreshPlaylistMeta(uuid);
         call(cb, { success });
     });
 }
