@@ -109,6 +109,10 @@ Item {
         case "arrow-down-filled":
             // Fat solid arrow — the stroked one smears into noise below ~10px.
             return "M 9 2 H 15 V 10 H 21 L 12 22 L 3 10 H 9 Z"
+        case "chevron-left":
+            return "M 15 4 L 7 12 L 15 20"
+        case "chevron-right":
+            return "M 9 4 L 17 12 L 9 20"
         case "check":
             return "M 5 12 L 10 17 L 19 7"
         case "sort":

@@ -41,6 +41,10 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 > - **Local files in the player** — a local track no longer leaves the player
 >   bar and Now Playing reading "No track playing" with no art, and the
 >   Tidal-only actions (like, download, lyrics) stay hidden for it
+> - **Home rows scroll sideways** — a trackpad swipe or shift+wheel moves the
+>   Home and Search rows again (their wheel handler saw neither: it listened on
+>   one axis only, and read an angle a trackpad does not send), and a row with
+>   more cards than fit gets hover arrows and a scrollbar (upstream bug)
 >
 > Upstream maintainers: every commit is scoped and conventional — cherry-pick
 > anything you like, or ask for a focused PR of any subset.

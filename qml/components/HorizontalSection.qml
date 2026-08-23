@@ -72,8 +72,29 @@ Item {
 
         // Horizontal scroll list
         Item {
+            id: rail
             Layout.fillWidth: true
-            height: cardSize + 64 + (hbar.visible ? 8 : 0)
+            height: cardSize + 64 + (rail.overflows ? 8 : 0)
+
+            readonly property real maxX: Math.max(0, hlist.contentWidth - hlist.width)
+            readonly property bool overflows: maxX > 1
+
+            HoverHandler { id: railHov }
+
+            NumberAnimation {
+                id: railAnim
+                target: hlist; property: "contentX"
+                duration: 260; easing.type: Easing.OutCubic
+            }
+
+            // Wheel and drag land where they land; the arrows move a screenful
+            // at a time, which is what a plain mouse has to work with.
+            function scrollBy(dx) {
+                railAnim.stop()
+                railAnim.from = hlist.contentX
+                railAnim.to   = Math.max(0, Math.min(rail.maxX, hlist.contentX + dx))
+                railAnim.start()
+            }
 
             ListView {
                 id: hlist
@@ -94,7 +115,9 @@ Item {
 
                 ScrollBar.horizontal: ScrollBar {
                     id: hbar
-                    policy: ScrollBar.AlwaysOff
+                    // Draggable even though the list itself is not interactive,
+                    // and only there when there is something to scroll to.
+                    policy: rail.overflows ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
                     minimumSize: 0.05
                 }
 
@@ -113,26 +136,38 @@ Item {
                 }
             }
 
-            // Shift+wheel or native horizontal trackpad two-finger swipe
-            WheelHandler {
-                onWheel: (event) => {
-                    var hDelta = event.angleDelta.x
-                    var vDelta = event.angleDelta.y
-                    var hasShift = (event.modifiers & Qt.ShiftModifier) !== 0
-                    var effectiveDelta = (Math.abs(hDelta) > Math.abs(vDelta))
-                        ? hDelta
-                        : (hasShift ? vDelta : 0)
+            // Wheel handling goes through a MouseArea, not a WheelHandler: a
+            // WheelHandler reacts only on the axis its `orientation` names and
+            // decides that from angleDelta, and a macOS trackpad sends precise
+            // pixelDelta scrolls — so a sideways two-finger swipe reached
+            // neither orientation and these rows would not move. NoButton keeps
+            // presses falling through to the cards, and without hoverEnabled it
+            // leaves the cards' own hover handlers (and their cursor) alone.
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.NoButton
+                onWheel: (wheel) => {
+                    var usesPixels = wheel.pixelDelta.x !== 0 || wheel.pixelDelta.y !== 0
+                    var dx = usesPixels ? wheel.pixelDelta.x : wheel.angleDelta.x
+                    var dy = usesPixels ? wheel.pixelDelta.y : wheel.angleDelta.y
+                    // Pixel deltas are already in the units the view moves in;
+                    // angle deltas are eighths of a degree and need scaling.
+                    var step = usesPixels ? 1.0 : 0.8
+                    var hasShift = (wheel.modifiers & Qt.ShiftModifier) !== 0
 
-                    if (effectiveDelta !== 0) {
-                        var maxX = Math.max(0, hlist.contentWidth - hlist.width)
-                        var newX = Math.max(0, Math.min(maxX, hlist.contentX - effectiveDelta * 0.8))
-                        if (newX !== hlist.contentX) {
-                            hlist.contentX = newX
-                            event.accepted = true
-                        } else {
-                            event.accepted = false
-                        }
-                    } else if (vDelta !== 0) {
+                    // Sideways swipe, or a vertical wheel held with shift.
+                    var h = Math.abs(dx) > Math.abs(dy) ? dx : (hasShift ? dy : 0)
+                    if (h !== 0) {
+                        var newX = Math.max(0, Math.min(rail.maxX, hlist.contentX - h * step))
+                        if (newX === hlist.contentX) { wheel.accepted = false; return }
+                        railAnim.stop()
+                        hlist.contentX = newX
+                        wheel.accepted = true
+                        return
+                    }
+
+                    // A plain vertical wheel belongs to the page behind the row.
+                    if (dy !== 0) {
                         var p = root.parent
                         var scrollParent = null
                         while (p) {
@@ -144,13 +179,59 @@ Item {
                         }
                         if (scrollParent) {
                             var maxY = Math.max(0, scrollParent.contentHeight - scrollParent.height)
-                            scrollParent.contentY = Math.max(0, Math.min(maxY, scrollParent.contentY - vDelta))
-                            event.accepted = true
-                        } else {
-                            event.accepted = false
+                            scrollParent.contentY = Math.max(0, Math.min(maxY, scrollParent.contentY - dy * step))
+                            wheel.accepted = true
+                            return
                         }
                     }
+                    wheel.accepted = false
                 }
+            }
+
+            // An inline component cannot see the ids around it, so everything
+            // it needs is handed in at the instantiation below.
+            component RailArrow: Rectangle {
+                id: arrow
+                property bool pointsRight: true
+                property bool canScroll: false
+                property bool rowHovered: false
+                property real coverSize: 0
+                signal activated()
+
+                width: 34; height: 34; radius: 17
+                y: (coverSize - height) / 2
+                color: arrowHov.hovered ? Theme.surfaceHov : Theme.surfaceHigh
+                border.width: 1
+                border.color: Theme.border
+                visible: opacity > 0
+                opacity: (rowHovered && canScroll) ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 120 } }
+
+                VectorIcon {
+                    anchors.centerIn: parent
+                    name: arrow.pointsRight ? "chevron-right" : "chevron-left"
+                    color: Theme.textPrimary
+                    width: 16; height: 16; strokeWidth: 2
+                }
+                HoverHandler { id: arrowHov; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: arrow.activated() }
+            }
+
+            RailArrow {
+                x: 8
+                pointsRight: false
+                rowHovered: railHov.hovered
+                coverSize: root.cardSize
+                canScroll: hlist.contentX > 1
+                onActivated: rail.scrollBy(-hlist.width * 0.8)
+            }
+            RailArrow {
+                x: rail.width - width - 8
+                pointsRight: true
+                rowHovered: railHov.hovered
+                coverSize: root.cardSize
+                canScroll: hlist.contentX < rail.maxX - 1
+                onActivated: rail.scrollBy(hlist.width * 0.8)
             }
         }
     }
