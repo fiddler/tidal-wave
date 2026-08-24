@@ -139,8 +139,13 @@ int Application::run(int argc, char **argv) {
     QApplication::setOrganizationName("TidalWave");
     QApplication::setDesktopFileName("tidal-wave");
 
+    // No multisampling. Qt Quick antialiases its own geometry and draws text
+    // from a distance field, so the 4x MSAA this used to ask for bought no
+    // visible quality — it only made every frame render into a 4x sampled
+    // target and resolve it, which on a 1280x800 window is the difference
+    // between a cheap frame and an expensive one.
     QSurfaceFormat format;
-    format.setSamples(4);
+    format.setSamples(1);
     QSurfaceFormat::setDefaultFormat(format);
 
     QApplication::setQuitOnLastWindowClosed(false);

@@ -44,7 +44,7 @@ Item {
                     from: 0; to: 360
                     duration: 800
                     loops: Animation.Infinite
-                    running: SyncState.busy
+                    running: SyncState.busy && spinner.visible && AppFocus.active
                 }
             }
             Text {

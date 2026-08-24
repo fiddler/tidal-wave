@@ -271,7 +271,7 @@ Item {
                         from: 0; to: 360
                         duration: 800
                         loops: Animation.Infinite
-                        running: root.isLoading
+                        running: root.isLoading && loadSpinner.visible && AppFocus.active
                     }
                 }
                 Text {
@@ -428,7 +428,7 @@ Item {
                         from: 0; to: 360
                         duration: 800
                         loops: Animation.Infinite
-                        running: root.dlState === "busy"
+                        running: root.dlState === "busy" && dlSpinner.visible && AppFocus.active
                     }
                 }
 

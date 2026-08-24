@@ -350,7 +350,7 @@ Rectangle {
                                 opacity: 0.3
                                 SequentialAnimation on opacity {
                                     loops: Animation.Infinite
-                                    running: auth.state === 1
+                                    running: auth.state === 1 && AppFocus.active
                                     PauseAnimation { duration: index * 200 }
                                     NumberAnimation { to: 1; duration: 400 }
                                     NumberAnimation { to: 0.3; duration: 400 }

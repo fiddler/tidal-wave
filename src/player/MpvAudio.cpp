@@ -1,6 +1,7 @@
 #include "MpvAudio.h"
 
 #include <QDebug>
+#include <QGuiApplication>
 #include <QTimer>
 
 #include <mpv/client.h>
@@ -34,6 +35,21 @@ MpvAudio::MpvAudio(QObject *parent) : QObject(parent) {
         return;
     }
 
+    // Nothing here wants mpv's own UI layer. `config=no` keeps a stray
+    // ~/.config/mpv/mpv.conf from redirecting the audio output behind our
+    // back; the rest turn off the scripts mpv loads by default, each of which
+    // costs a thread and a Lua VM in a process that never shows a video
+    // window. `load-scripts` only covers the user's own scripts directory —
+    // the built-ins have one switch each, and they are named per mpv version,
+    // so an unknown one here is a shrug rather than a failure.
+    for (const char *opt : {"config", "load-scripts", "load-commands",
+                            "load-console", "load-context-menu",
+                            "load-positioning", "load-select",
+                            "load-stats-overlay", "load-auto-profiles",
+                            "ytdl"}) {
+        if (mpv_set_option_string(m_mpv, opt, "no") < 0)
+            qWarning() << "[mpv] no such option:" << opt;
+    }
     // Audio-only player: no window, no video decoding, no terminal output.
     mpv_set_option_string(m_mpv, "vid",           "no");
     mpv_set_option_string(m_mpv, "audio-display", "no");
@@ -69,11 +85,20 @@ MpvAudio::MpvAudio(QObject *parent) : QObject(parent) {
 
     // mpv reports time-pos far more often than a seek bar needs. Polling on a
     // fixed tick keeps the UI update rate predictable instead of tying it to
-    // the decoder.
+    // the decoder. It runs only while the audio does: a paused or stopped
+    // player has no position to report, and this used to keep waking the
+    // process five times a second for the life of the app.
     m_poll = new QTimer(this);
     m_poll->setInterval(200);
     connect(m_poll, &QTimer::timeout, this, &MpvAudio::pollPosition);
-    m_poll->start();
+    // Every tick repaints the window. While the app is in the background that
+    // buys nothing: the elapsed time is only accurate to the second anyway, so
+    // the only thing the extra four ticks render is a slightly smoother seek
+    // bar that nobody is looking at.
+    connect(qGuiApp, &QGuiApplication::applicationStateChanged,
+            this, [this](Qt::ApplicationState state) {
+        m_poll->setInterval(state == Qt::ApplicationActive ? 200 : 1000);
+    });
 }
 
 MpvAudio::~MpvAudio() {
@@ -171,6 +196,10 @@ void MpvAudio::setAudioFilter(const QString &af) {
 void MpvAudio::setState(State s) {
     if (m_state == s) return;
     m_state = s;
+    if (m_poll) {
+        if (s == State::Playing) m_poll->start();
+        else                     m_poll->stop();
+    }
     emit playbackStateChanged(s);
 }
 
@@ -219,6 +248,9 @@ void MpvAudio::drainEvents() {
             // Fired once the decoder has audio ready, after a load or a seek.
             emit mediaStatusChanged(Status::Buffered);
             updateState();
+            // The tick above is stopped while paused, so this is what moves the
+            // seek bar when the track is scrubbed without playing it.
+            pollPosition();
             break;
 
         case MPV_EVENT_END_FILE: {

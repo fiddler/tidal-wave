@@ -123,6 +123,7 @@ endif()
 
 set_source_files_properties(qml/Theme.qml qml/components/DragState.qml
                             qml/components/SyncState.qml
+                            qml/components/AppFocus.qml
                             PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(tidal-wave
@@ -142,6 +143,7 @@ qt_add_qml_module(tidal-wave
         qml/components/EqualizerBars.qml
         qml/components/SyncState.qml
         qml/components/DragState.qml
+        qml/components/AppFocus.qml
         qml/components/MediaCard.qml
         qml/components/BackButton.qml
         qml/components/PillButton.qml

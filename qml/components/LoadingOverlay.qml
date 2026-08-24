@@ -19,7 +19,7 @@ Item {
             from: 0; to: 360
             duration: 900
             loops: Animation.Infinite
-            running: parent.visible
+            running: parent.visible && AppFocus.active
         }
 
         Rectangle {

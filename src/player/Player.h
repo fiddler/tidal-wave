@@ -174,6 +174,12 @@ private:
     int                  m_index         = -1;
     Track                m_currentTrack;
     bool                 m_loading       = false;
+    // Nothing outside this class clears m_loading; every path that ends a load
+    // has to call setLoading(false) itself. A stream fetch that simply never
+    // answers used to leave it true for good, and the track row's spinner is
+    // an infinite animation — one stuck row kept the whole window rendering at
+    // the display refresh rate until the app was quit.
+    QTimer              *m_loadWatchdog  = nullptr;
     bool                 m_shuffle       = false;
     int                  m_repeatMode    = 0;  // 0=no 1=all 2=one
     QString              m_sourceType;

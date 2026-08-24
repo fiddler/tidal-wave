@@ -447,7 +447,8 @@ Rectangle {
                             }
                             RotationAnimator {
                                 target: npSpinner; from: 0; to: 360; duration: 800
-                                loops: Animation.Infinite; running: root.dlState === "busy"
+                                loops: Animation.Infinite
+                                running: root.dlState === "busy" && npSpinner.visible && AppFocus.active
                             }
                         }
                         HoverHandler { id: npDlHov; cursorShape: Qt.PointingHandCursor }

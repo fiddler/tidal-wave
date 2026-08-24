@@ -99,6 +99,17 @@ QVariantMap Player::currentTrackMap() const {
 void Player::setLoading(bool l) {
     if (m_loading == l) return;
     m_loading = l;
+    if (!m_loadWatchdog) {
+        m_loadWatchdog = new QTimer(this);
+        m_loadWatchdog->setSingleShot(true);
+        m_loadWatchdog->setInterval(30'000);
+        connect(m_loadWatchdog, &QTimer::timeout, this, [this]() {
+            qWarning() << "[play] still loading after 30s — clearing the state";
+            setLoading(false);
+        });
+    }
+    if (l) m_loadWatchdog->start();
+    else   m_loadWatchdog->stop();
     emit loadingChanged(l);
 }
 
