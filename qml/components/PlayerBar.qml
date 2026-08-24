@@ -56,6 +56,7 @@ Rectangle {
                     anchors.fill: parent
                     source: hasTrack ? "image://tidal/" + track.coverUrl : ""
                     fillMode: Image.PreserveAspectCrop; smooth: true; mipmap: true
+                    sourceSize: Qt.size(112, 112)
                 }
                 MouseArea {
                     anchors.fill: parent; cursorShape: Qt.PointingHandCursor

@@ -296,6 +296,11 @@ Item {
                     fillMode: Image.PreserveAspectCrop
                     smooth: true
                     mipmap: true
+                    // Covers arrive at 320x320. Decoded at that size for a
+                    // thumbnail this small they cost ~400 KB of RGBA each, and
+                    // a list holds dozens; the provider honours sourceSize and
+                    // scales while decoding. 2x the drawn size keeps it sharp.
+                    sourceSize: Qt.size(72, 72)
                 }
             }
 
@@ -697,6 +702,7 @@ Item {
                                     anchors.fill: parent
                                     source: model.coverUrl ? "image://tidal/" + model.coverUrl : ""
                                     fillMode: Image.PreserveAspectCrop; smooth: true
+                                    sourceSize: Qt.size(56, 56)
                                 }
                             }
                             Column {
