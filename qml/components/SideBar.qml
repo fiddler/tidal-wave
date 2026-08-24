@@ -774,7 +774,13 @@ Rectangle {
         id: settingsPopup
         anchors.centerIn: Overlay.overlay
         width: 480
-        height: 640
+        // Tall enough for the whole panel, and no taller than the window can
+        // hold. It was a flat 640, which is less than the content has needed
+        // since the storage section went in — the keyboard map sat below the
+        // fold on a window with room to spare. The ScrollView underneath still
+        // does its job when the window really is too short.
+        readonly property int maxHeight: Overlay.overlay ? Overlay.overlay.height - 48 : 640
+        height: Math.max(320, Math.min(maxHeight, settingsContent.implicitHeight))
 
         // Cover art cache. Read when the popup opens rather than bound to
         // anything: it changes only when this panel is on screen.
@@ -822,6 +828,7 @@ Rectangle {
             clip: true
 
             ColumnLayout {
+                id: settingsContent
                 width: parent.width
                 spacing: 0
 
