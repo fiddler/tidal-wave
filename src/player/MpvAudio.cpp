@@ -12,6 +12,14 @@
 
 namespace {
 
+// Seeded from the state the app is already in, not just from later changes: a
+// launch straight into the background (a login item, a media key on a restored
+// session) never emits applicationStateChanged, and would otherwise keep the
+// fast tick for as long as the app stayed unfocused.
+int pollIntervalFor(Qt::ApplicationState state) {
+    return state == Qt::ApplicationActive ? 200 : 1000;
+}
+
 // Called from libmpv's own thread. Nothing here may touch Qt state directly —
 // it only nudges the object to drain the queue on the Qt thread.
 void wakeup(void *ctx) {
@@ -46,7 +54,7 @@ MpvAudio::MpvAudio(QObject *parent) : QObject(parent) {
                             "load-console", "load-context-menu",
                             "load-positioning", "load-select",
                             "load-stats-overlay", "load-auto-profiles",
-                            "ytdl"}) {
+                            "osc", "ytdl"}) {
         if (mpv_set_option_string(m_mpv, opt, "no") < 0)
             qWarning() << "[mpv] no such option:" << opt;
     }
@@ -89,7 +97,7 @@ MpvAudio::MpvAudio(QObject *parent) : QObject(parent) {
     // player has no position to report, and this used to keep waking the
     // process five times a second for the life of the app.
     m_poll = new QTimer(this);
-    m_poll->setInterval(200);
+    m_poll->setInterval(pollIntervalFor(qGuiApp->applicationState()));
     connect(m_poll, &QTimer::timeout, this, &MpvAudio::pollPosition);
     // Every tick repaints the window. While the app is in the background that
     // buys nothing: the elapsed time is only accurate to the second anyway, so
@@ -97,7 +105,7 @@ MpvAudio::MpvAudio(QObject *parent) : QObject(parent) {
     // bar that nobody is looking at.
     connect(qGuiApp, &QGuiApplication::applicationStateChanged,
             this, [this](Qt::ApplicationState state) {
-        m_poll->setInterval(state == Qt::ApplicationActive ? 200 : 1000);
+        m_poll->setInterval(pollIntervalFor(state));
     });
 }
 

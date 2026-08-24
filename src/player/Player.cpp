@@ -97,8 +97,6 @@ QVariantMap Player::currentTrackMap() const {
 }
 
 void Player::setLoading(bool l) {
-    if (m_loading == l) return;
-    m_loading = l;
     if (!m_loadWatchdog) {
         m_loadWatchdog = new QTimer(this);
         m_loadWatchdog->setSingleShot(true);
@@ -108,8 +106,14 @@ void Player::setLoading(bool l) {
             setLoading(false);
         });
     }
+    // Armed before the early return below: picking a second track while the
+    // first is still loading calls setLoading(true) again without changing the
+    // flag, and that load deserves its own 30 seconds rather than inheriting
+    // whatever is left of the previous one.
     if (l) m_loadWatchdog->start();
     else   m_loadWatchdog->stop();
+    if (m_loading == l) return;
+    m_loading = l;
     emit loadingChanged(l);
 }
 
