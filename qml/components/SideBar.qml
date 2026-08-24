@@ -775,6 +775,37 @@ Rectangle {
         anchors.centerIn: Overlay.overlay
         width: 480
         height: 640
+
+        // Cover art cache. Read when the popup opens rather than bound to
+        // anything: it changes only when this panel is on screen.
+        property int    artCacheBytes: 0
+        property string artCacheNote: ""
+
+        function refreshArtCache() { artCacheBytes = app.artCacheBytes() }
+
+        function formatBytes(b) {
+            if (b < 1024)             return b + " B"
+            if (b < 1024 * 1024)      return Math.round(b / 1024) + " KB"
+            return (b / (1024 * 1024)).toFixed(1) + " MB"
+        }
+
+        onOpened: {
+            artCacheNote = ""
+            refreshArtCache()
+        }
+
+        Timer { id: artCacheNoteTimer; interval: 4000; onTriggered: settingsPopup.artCacheNote = "" }
+
+        Connections {
+            target: app
+            function onArtCacheCleared(filesRemoved) {
+                settingsPopup.artCacheNote = filesRemoved === 1
+                    ? "Cleared 1 file"
+                    : "Cleared " + filesRemoved + " files"
+                artCacheNoteTimer.restart()
+                settingsPopup.refreshArtCache()
+            }
+        }
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -983,6 +1014,75 @@ Rectangle {
                         }
                     }
 
+                }
+
+                Rectangle { color: Theme.border; height: 1; Layout.fillWidth: true; Layout.leftMargin: 20; Layout.rightMargin: 20 }
+
+                // ── STORAGE ──────────────────────────────
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 20
+                    Layout.rightMargin: 20
+                    Layout.topMargin: 14
+                    Layout.bottomMargin: 4
+                    spacing: 10
+
+                    Text {
+                        text: "STORAGE"
+                        color: Theme.textDim
+                        font.pixelSize: 11; font.bold: true; font.letterSpacing: 1
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+                            Text {
+                                text: "Cover art cache"
+                                color: Theme.textPrimary
+                                font.pixelSize: 14
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: settingsPopup.artCacheNote !== ""
+                                      ? settingsPopup.artCacheNote
+                                      : (settingsPopup.artCacheBytes === 0
+                                         ? "Empty"
+                                         : settingsPopup.formatBytes(settingsPopup.artCacheBytes)
+                                           + " — artwork re-downloads as you browse")
+                                color: settingsPopup.artCacheNote !== "" ? Theme.green : Theme.textDim
+                                font.pixelSize: 12
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+
+                        Rectangle {
+                            id: clearCacheButton
+                            enabled: settingsPopup.artCacheBytes > 0
+                            opacity: enabled ? 1 : 0.4
+                            height: 30; width: clearCacheLabel.implicitWidth + 20; radius: 6
+                            color: clearCacheHov.hovered && enabled ? Theme.surfaceHov : Theme.surface
+                            border.color: Theme.border
+                            Text {
+                                id: clearCacheLabel; anchors.centerIn: parent
+                                text: "Clear"; color: Theme.textPrimary
+                                font.pixelSize: 12
+                            }
+                            HoverHandler { id: clearCacheHov; enabled: clearCacheButton.enabled }
+                            TapHandler {
+                                enabled: clearCacheButton.enabled
+                                onTapped: app.clearArtCache()
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: clearCacheButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                acceptedButtons: Qt.NoButton
+                            }
+                        }
+                    }
                 }
 
                 Rectangle { color: Theme.border; height: 1; Layout.fillWidth: true; Layout.leftMargin: 20; Layout.rightMargin: 20 }

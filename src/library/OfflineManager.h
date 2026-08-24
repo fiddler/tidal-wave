@@ -50,6 +50,12 @@ public:
     Q_INVOKABLE QVariantList cachedTracks(const QString &uuid) const;
     Q_INVOKABLE QVariantList pinnedPlaylists() const;
 
+    // Re-fetch the artwork of every track already downloaded. Runs at start-up
+    // for tracks cached before covers were pre-fetched, and again after the
+    // art cache is emptied from Settings, so a pinned playlist does not sit
+    // there with no covers until the next time it is online.
+    Q_INVOKABLE void refetchCoverArt();
+
     // ── player intercept ────────────────────────────────
     // Path of the cached audio for a fully downloaded track, else empty.
     QString localPathFor(qint64 trackId) const;

@@ -14,6 +14,14 @@ public:
     // covers of pinned tracks so they render with no network.
     static QString cachePathFor(const QUrl &url);
     static void    storeInCache(const QUrl &url, const QByteArray &data);
+
+    // Settings shows the size and offers to empty it. Nothing in here is
+    // irreplaceable — every entry is a re-downloadable Tidal image — so the
+    // clear is unconditional, and OfflineManager re-fetches the covers that
+    // pinned playlists need straight afterwards.
+    static QString cacheDir();
+    static qint64  cacheBytes();
+    static int     clearCache();   // returns files removed
 };
 
 class ImageResponse : public QQuickImageResponse {

@@ -5,7 +5,9 @@
 #include <QImageReader>
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QDebug>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QStandardPaths>
 
@@ -22,16 +24,45 @@ QQuickImageResponse *TidalImageProvider::requestImageResponse(
     return new ::ImageResponse(url, requestedSize);
 }
 
-QString TidalImageProvider::cachePathFor(const QUrl &url) {
+QString TidalImageProvider::cacheDir() {
     static const QString dir = [] {
         const QString d = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
                           + QStringLiteral("/artcache");
         QDir().mkpath(d);
         return d;
     }();
+    return dir;
+}
+
+QString TidalImageProvider::cachePathFor(const QUrl &url) {
     const QByteArray hash = QCryptographicHash::hash(
         url.toString().toUtf8(), QCryptographicHash::Sha1).toHex();
-    return dir + QStringLiteral("/") + QString::fromLatin1(hash);
+    return cacheDir() + QStringLiteral("/") + QString::fromLatin1(hash);
+}
+
+qint64 TidalImageProvider::cacheBytes() {
+    qint64 total = 0;
+    QDirIterator it(cacheDir(), QDir::Files);
+    while (it.hasNext()) { it.next(); total += it.fileInfo().size(); }
+    return total;
+}
+
+int TidalImageProvider::clearCache() {
+    // The suffix check is the guard: cacheDir() is built from
+    // AppDataLocation, and an empty or unexpected value there would otherwise
+    // point this loop at a directory that is not ours to empty.
+    const QString dir = cacheDir();
+    if (!dir.endsWith(QStringLiteral("/artcache"))) {
+        qWarning() << "[artcache] refusing to clear unexpected path:" << dir;
+        return 0;
+    }
+    int removed = 0;
+    QDirIterator it(dir, QDir::Files);
+    while (it.hasNext()) {
+        it.next();
+        if (QFile::remove(it.filePath())) ++removed;
+    }
+    return removed;
 }
 
 void TidalImageProvider::storeInCache(const QUrl &url, const QByteArray &data) {

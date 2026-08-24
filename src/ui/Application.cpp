@@ -1,6 +1,8 @@
 #include "Application.h"
 #ifdef Q_OS_LINUX
 #include "cast/CastManager.h"
+#include "library/OfflineManager.h"
+#include "ui/ImageProvider.h"
 #endif
 #ifdef Q_OS_MACOS
 #include "macos/MacNowPlaying.h"
@@ -338,6 +340,19 @@ QString Application::lastNavPage()       const { return readNav(QStringLiteral("
 QString Application::lastNavParams()     const { return readNav(QStringLiteral("lastPageParams")); }
 QString Application::lastNavPrevPage()   const { return readNav(QStringLiteral("lastPrevPage")); }
 QString Application::lastNavPrevParams() const { return readNav(QStringLiteral("lastPrevPageParams")); }
+
+qint64 Application::artCacheBytes() const { return TidalImageProvider::cacheBytes(); }
+
+void Application::clearArtCache() {
+    const int removed = TidalImageProvider::clearCache();
+    qInfo() << "[artcache] cleared" << removed << "files";
+    // Nothing on screen breaks: the images already decoded stay in Qt Quick's
+    // pixmap cache for this session, and anything asked for again streams from
+    // Tidal. The one case worth repairing at once is a pinned playlist, whose
+    // covers are meant to render with no network at all.
+    if (m_offline) m_offline->refetchCoverArt();
+    emit artCacheCleared(removed);
+}
 
 // Only installed on macOS, where the tray "Quit" item is gone: a quit that
 // comes from the system (⌘Q, Dock menu, logout) must be marked as real, or

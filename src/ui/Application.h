@@ -43,6 +43,13 @@ public:
     Q_INVOKABLE QString lastNavPrevPage()   const;
     Q_INVOKABLE QString lastNavPrevParams() const;
 
+    // ── Cover art cache ─────────────────────────────────────────────────
+    // Read on demand rather than kept as a property: it only changes when
+    // Settings is open, and walking the directory is not worth doing on a
+    // timer for a number nobody is looking at.
+    Q_INVOKABLE qint64 artCacheBytes() const;
+    Q_INVOKABLE void   clearArtCache();
+
     void showWindow();
     void hideWindow();
     void toggleWindow();
@@ -52,6 +59,7 @@ protected:
 
 signals:
     void reallyQuitChanged();
+    void artCacheCleared(int filesRemoved);
 
 private:
     QString readNav(const QString &field) const;

@@ -54,8 +54,7 @@ OfflineManager::OfflineManager(TidalClient *client, QObject *parent)
     // The artwork backfill covers tracks cached before covers were pre-fetched
     // (it is a no-op when the cache already has them).
     QTimer::singleShot(5000, this, [this]() {
-        QSqlQuery q(QStringLiteral("SELECT track_id FROM tracks WHERE state='done'"), m_db);
-        while (q.next()) cacheCoverArt(q.value(0).toLongLong());
+        refetchCoverArt();
         startNext();
     });
 }
@@ -457,6 +456,11 @@ void OfflineManager::completeJob(const QString &tier, qint64 bytes, const QStrin
     m_job = nullptr;
     notifyPlaylistsHolding(id);
     scheduleNext(elapsed, duration);
+}
+
+void OfflineManager::refetchCoverArt() {
+    QSqlQuery q(QStringLiteral("SELECT track_id FROM tracks WHERE state='done'"), m_db);
+    while (q.next()) cacheCoverArt(q.value(0).toLongLong());
 }
 
 void OfflineManager::cacheCoverArt(qint64 trackId) {
