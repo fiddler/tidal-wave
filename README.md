@@ -19,7 +19,8 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 >   dropping to the login page while holding a valid token; a splash covers the
 >   session check, so the login page no longer flashes on every launch
 >   (upstream bug)
-> - **macOS polish** — real app bundle with icon, media keys / Now Playing
+> - **macOS polish** — real app bundle with icon, media keys / Now Playing,
+>   and Cmd+M minimizes the window instead of muting playback
 > - **Sidebar upgrades** — now-playing indicator, track counts, sort & filter
 >   menu, playlist creation, crisper icon rendering
 > - **10-band equalizer** — mpv/FFmpeg-backed EQ (32 Hz–16 kHz, ±24 dB) with
@@ -83,7 +84,8 @@ I used Claude Code over the course of 3 days to generate most of the code for th
 | Left | Seek backward 10 seconds |
 | Up | Volume up (5% increment) |
 | Down | Volume down (5% increment) |
-| Ctrl + M | Mute / Unmute |
+| Cmd + M (macOS) | Minimize |
+| Ctrl + M (Windows / Linux) | Mute / Unmute |
 | Ctrl + S | Toggle Shuffle |
 | Ctrl + R | Cycle Repeat Mode (Off / All / One) |
 | Ctrl + 1 | Go to Home |

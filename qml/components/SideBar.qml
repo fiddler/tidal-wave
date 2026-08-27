@@ -1110,20 +1110,26 @@ Rectangle {
                     }
 
                     Repeater {
-                        model: [
-                            { k: "Space",              d: "Play / Pause" },
-                            { k: "Ctrl+Right / Left",  d: "Next / Previous track" },
-                            { k: "Right / Left",        d: "Seek forward / back 10s" },
-                            { k: "Up / Down",           d: "Volume up / down" },
-                            { k: "Ctrl+M",             d: "Mute" },
-                            { k: "Ctrl+S",             d: "Toggle shuffle" },
-                            { k: "Ctrl+R",             d: "Cycle repeat mode" },
-                            { k: "Ctrl+1 / 2 / 3",    d: "Home / Search / Collection" },
-                            { k: "Ctrl+N",             d: "Now Playing" },
-                            { k: "Ctrl+Q",             d: "Toggle queue" },
-                            { k: "Alt+Left / Esc",     d: "Go back" },
-                            { k: "Ctrl+,",             d: "Settings" }
-                        ]
+                        model: {
+                            var shortcuts = [
+                                { k: "Space",              d: "Play / Pause" },
+                                { k: "Ctrl+Right / Left",  d: "Next / Previous track" },
+                                { k: "Right / Left",       d: "Seek forward / back 10s" },
+                                { k: "Up / Down",          d: "Volume up / down" },
+                                { k: "Ctrl+S",             d: "Toggle shuffle" },
+                                { k: "Ctrl+R",             d: "Cycle repeat mode" },
+                                { k: "Ctrl+1 / 2 / 3",     d: "Home / Search / Collection" },
+                                { k: "Ctrl+N",             d: "Now Playing" },
+                                { k: "Ctrl+Q",             d: "Toggle queue" },
+                                { k: "Alt+Left / Esc",     d: "Go back" },
+                                { k: "Ctrl+,",             d: "Settings" }
+                            ]
+                            if (Qt.platform.os === "osx")
+                                shortcuts.splice(4, 0, { k: "Cmd+M", d: "Minimize" })
+                            else
+                                shortcuts.splice(4, 0, { k: "Ctrl+M", d: "Mute" })
+                            return shortcuts
+                        }
                         delegate: RowLayout {
                             Layout.fillWidth: true
                             spacing: 12

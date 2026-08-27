@@ -341,7 +341,8 @@ ApplicationWindow {
         Shortcut { sequence: "Left";       context: Qt.ApplicationShortcut; enabled: auth.state === 2 && !root.isTypingContext(root.activeFocusItem); onActivated: player.seek(Math.max(0, player.position - 10000)) }
         Shortcut { sequence: "Up";         context: Qt.ApplicationShortcut; enabled: auth.state === 2 && !root.isTypingContext(root.activeFocusItem); onActivated: player.setVolume(Math.min(1, player.volume + 0.05)) }
         Shortcut { sequence: "Down";       context: Qt.ApplicationShortcut; enabled: auth.state === 2 && !root.isTypingContext(root.activeFocusItem); onActivated: player.setVolume(Math.max(0, player.volume - 0.05)) }
-        Shortcut { sequence: "Ctrl+M";     context: Qt.ApplicationShortcut; enabled: auth.state === 2; onActivated: player.setMuted(!player.muted) }
+        Shortcut { sequence: "Ctrl+M";     context: Qt.ApplicationShortcut; enabled: Qt.platform.os === "osx"; onActivated: root.showMinimized() }
+        Shortcut { sequence: "Ctrl+M";     context: Qt.ApplicationShortcut; enabled: auth.state === 2 && Qt.platform.os !== "osx"; onActivated: player.setMuted(!player.muted) }
         Shortcut { sequence: "Ctrl+S";     context: Qt.ApplicationShortcut; enabled: auth.state === 2; onActivated: player.setShuffle(!player.shuffle) }
         Shortcut { sequence: "Ctrl+R";     context: Qt.ApplicationShortcut; enabled: auth.state === 2; onActivated: player.setRepeatMode((player.repeatMode + 1) % 3) }
 
