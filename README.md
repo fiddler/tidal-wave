@@ -19,6 +19,8 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 >   dropping to the login page while holding a valid token; a splash covers the
 >   session check, so the login page no longer flashes on every launch
 >   (upstream bug)
+> - **Startup icon.** The session-restore screen uses the wave app icon instead
+>   of the old cyan placeholder
 > - **macOS polish** — real app bundle with icon, media keys / Now Playing,
 >   and Cmd+M minimizes the window instead of muting playback
 > - **Sidebar upgrades** — now-playing indicator, track counts, sort & filter

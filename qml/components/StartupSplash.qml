@@ -22,19 +22,14 @@ Rectangle {
         anchors.centerIn: parent
         spacing: 12
 
-        Rectangle {
+        Image {
             Layout.alignment: Qt.AlignHCenter
             width: 64
             height: 64
-            radius: 16
-            color: Theme.accent
-            Text {
-                anchors.centerIn: parent
-                text: "≋"
-                color: "white"
-                font.pixelSize: 32
-                font.bold: true
-            }
+            source: "../../assets/icon.png"
+            sourceSize: Qt.size(128, 128)
+            smooth: true
+            mipmap: true
         }
 
         Text {
