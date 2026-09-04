@@ -22,7 +22,10 @@ Popup {
     // by the arrow keys but occupy an index, so `current` indexes this list.
     property var rows: []
     property int current: -1
-    readonly property string query: input.text.trim()
+    // Read from the field at the top of rebuild(), not bound to it: a binding
+    // and the field's onTextChanged handler have no defined order, so a bound
+    // property left the palette one keystroke behind the text it was showing.
+    property string query: ""
 
     // Per-section caps. Sections are always rendered in this order — a fixed
     // position is what makes "Cmd+K, three letters, Enter" a reflex, where a
@@ -39,9 +42,14 @@ Popup {
     // Chrome is the 56px field, the 30px hint bar and their two dividers; the
     // list takes what is left, so a two-result palette is a small box rather
     // than a mostly-empty tall one.
+    //
+    // The list's own contentHeight must not appear here: it is an estimate that
+    // moves with the view's height, and binding one to the other is a loop. Row
+    // heights are known up front, so rebuild() adds them up.
     readonly property int chromeHeight: 56 + 1 + 1 + 30
-    height: Math.min(parent ? parent.height - 120 : 560,
-                     chromeHeight + Math.max(56, list.contentHeight))
+    property int rowsHeight: 56
+    height: Math.min(parent ? parent.height - y - 24 : 560,
+                     chromeHeight + rowsHeight)
     x: parent ? (parent.width - width) / 2 : 0
     y: parent ? Math.max(24, parent.height * 0.12) : 24
     modal: true
@@ -249,6 +257,7 @@ Popup {
     function byScore(a, b) { return (b._score || 0) - (a._score || 0) }
 
     function rebuild() {
+        root.query = input.text.trim()
         var out = []
         var q = root.query.toLowerCase()
 
@@ -263,6 +272,7 @@ Popup {
                     out.push(trackRow(recent[r], recent[r].isLocal === true))
             }
             root.rows = out
+            measure()
             selectFirst()
             return
         }
@@ -283,9 +293,12 @@ Popup {
                 out.push(commandRow(cmdHits[ci].cmd, cmdHits[ci].cmd.typeLabel))
         }
 
-        var lib   = bridge.searchLibrary(q, maxTracks)
-        var lTr   = library.searchTracks(q, maxTracks)
-        var lPl   = library.searchPlaylists(q, maxPlaylists)
+        // The C++ side gets the query as typed: MatchScore folds case itself,
+        // and folding here first would break "Ä" against "ä".
+        var raw   = root.query
+        var lib   = bridge.searchLibrary(raw, maxTracks)
+        var lTr   = library.searchTracks(raw, maxTracks)
+        var lPl   = library.searchPlaylists(raw, maxPlaylists)
 
         // Tidal and local playlists share one section — they are the same idea
         // to the person typing, and the type label on the right says which.
@@ -325,7 +338,14 @@ Popup {
         // you don't already own is Cmd+K, type, Enter.
         out.push(searchRow(root.query))
         root.rows = out
+        measure()
         selectFirst()
+    }
+
+    function measure() {
+        var h = 0
+        for (var i = 0; i < rows.length; i++) h += rows[i].header ? 32 : 56
+        rowsHeight = Math.max(56, h)
     }
 
     function selectFirst() {
@@ -559,7 +579,8 @@ Popup {
                         onEntered: root.current = rowItem.index
                         onClicked: (mouse) => {
                             root.current = rowItem.index
-                            root.activate((mouse.modifiers & Qt.ShiftModifier) !== 0)
+                            root.activate((mouse.modifiers & Qt.ShiftModifier) !== 0
+                                          || (mouse.modifiers & Qt.ControlModifier) !== 0)
                         }
                     }
                 }

@@ -553,7 +553,8 @@ QVariantList TidalBridge::searchFavoritePlaylists(const QString &query) const {
 
 QVariantMap TidalBridge::searchLibrary(const QString &query, int limit) const {
     QVariantMap out;
-    const QString q = query.trimmed().toLower();
+    // Not lowercased: MatchScore folds case itself, Unicode included.
+    const QString q = query.trimmed();
     if (q.isEmpty() || limit <= 0) return out;
 
     // Playlists. Ordered by the sidebar's own sort first so equal scores come
@@ -563,7 +564,7 @@ QVariantMap TidalBridge::searchLibrary(const QString &query, int limit) const {
         sortPlaylists(pls);
         QList<Scored> hits;
         for (int i = 0; i < pls.size(); ++i) {
-            const int s = MatchScore::score(pls[i].title, {}, q);
+            const int s = MatchScore::score(pls[i].title, q);
             if (s >= 0) hits.append({s, i});
         }
         sortScored(hits);
@@ -580,7 +581,7 @@ QVariantMap TidalBridge::searchLibrary(const QString &query, int limit) const {
     {
         QList<Scored> hits;
         for (int i = 0; i < m_favoriteArtists.size(); ++i) {
-            const int s = MatchScore::score(m_favoriteArtists[i].name, {}, q);
+            const int s = MatchScore::score(m_favoriteArtists[i].name, q);
             if (s >= 0) hits.append({s, i});
         }
         sortScored(hits);
@@ -598,7 +599,11 @@ QVariantMap TidalBridge::searchLibrary(const QString &query, int limit) const {
         QList<Scored> hits;
         for (int i = 0; i < m_favoriteAlbums.size(); ++i) {
             const Album &a = m_favoriteAlbums[i];
-            const int s = MatchScore::score(a.title, {a.artistNames()}, q);
+            // Each artist name is scored on its own: artistNames() would join
+            // a new string per album on every keystroke.
+            int s = MatchScore::score(a.title, q);
+            if (s < 0)
+                for (const Artist &ar : a.artists) s = qMax(s, MatchScore::fieldScore(ar.name, q));
             if (s >= 0) hits.append({s, i});
         }
         sortScored(hits);
@@ -616,7 +621,11 @@ QVariantMap TidalBridge::searchLibrary(const QString &query, int limit) const {
         QList<Scored> hits;
         for (int i = 0; i < m_favoriteTracks.size(); ++i) {
             const Track &t = m_favoriteTracks[i];
-            const int s = MatchScore::score(t.title, {t.artistNames(), t.album.title}, q);
+            int s = MatchScore::score(t.title, q);
+            if (s < 0) {
+                s = MatchScore::fieldScore(t.album.title, q);
+                for (const Artist &ar : t.artists) s = qMax(s, MatchScore::fieldScore(ar.name, q));
+            }
             if (s >= 0) hits.append({s, i});
         }
         sortScored(hits);

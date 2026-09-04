@@ -30,11 +30,15 @@ Rectangle {
     }
 
     // Set by the command palette through navigate(). Filling the field is
-    // enough — the field's own edit signal runs the search.
+    // enough — the field's own edit signal runs the search. Cleared straight
+    // after, or searching for the same text twice would assign an unchanged
+    // property, emit nothing, and leave whatever the field had been edited to.
     property string pendingQuery: ""
     onPendingQueryChanged: {
         if (pendingQuery.length === 0) return
-        searchBar.text = pendingQuery
+        var q = pendingQuery
+        pendingQuery = ""
+        searchBar.text = q
     }
 
     ColumnLayout {

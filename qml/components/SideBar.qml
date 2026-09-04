@@ -12,6 +12,10 @@ Rectangle {
     signal navigate(string page, var params)
     signal openPalette()
 
+    // The window's Escape shortcut stands down while either of these is open,
+    // so Escape closes the popup instead of navigating the page behind it.
+    readonly property bool popupOpen: settingsPopup.opened || createPlaylistPopup.opened
+
     function openSettings()    { settingsPopup.open() }
     function openNewPlaylist() { createPlaylistPopup.open() }
 

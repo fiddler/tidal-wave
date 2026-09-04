@@ -33,6 +33,20 @@ QString tag(const QJsonObject &tags, const QStringList &names) {
     return {};
 }
 
+// A user's query is a literal, so its LIKE metacharacters have to stop being
+// wildcards: without this, "%" matches the whole library and the match count
+// stops agreeing with what was actually ranked. Pairs with the ESCAPE clause.
+QString escapeLike(const QString &s) {
+    QString out;
+    out.reserve(s.size() + 4);
+    for (const QChar &c : s) {
+        if (c == QLatin1Char('\\') || c == QLatin1Char('%') || c == QLatin1Char('_'))
+            out += QLatin1Char('\\');
+        out += c;
+    }
+    return out;
+}
+
 // Track tags are often "5/12" rather than "5".
 int tagNumber(const QJsonObject &tags, const QStringList &names) {
     const QString raw = tag(tags, names);
@@ -169,45 +183,53 @@ QVariantMap LocalLibrary::searchTracks(const QString &query, int limit) const {
 
     const QString needle = query.trimmed();
     if (needle.isEmpty() || limit <= 0) return out;
-    const QString lowered = needle.toLower();
-    const QString like    = QStringLiteral("%%%1%%").arg(needle);
 
-    QSqlQuery count(m_db);
-    count.prepare(QStringLiteral(
-        "SELECT COUNT(*) FROM tracks WHERE title LIKE :f OR artist LIKE :f OR album LIKE :f"));
-    count.bindValue(QStringLiteral(":f"), like);
-    if (count.exec() && count.next()) out[QStringLiteral("total")] = count.value(0).toInt();
+    // Two passes. The first scores straight off the columns and allocates
+    // nothing per row, so the ranking sees every match rather than whichever
+    // subset a LIMIT happened to keep — and "total" is then the real number of
+    // matches, not a LIKE count that disagrees with what was ranked.
+    //
+    // LIKE is a prefilter, never the ranking, and only when the query is pure
+    // ASCII: SQLite folds case for ASCII alone, so an "ä" prefilter would drop
+    // exactly the rows a Finnish or German library needs it to find. A
+    // non-ASCII query scans instead — rare, and correct.
+    bool ascii = true;
+    for (const QChar &c : needle) if (c.unicode() > 127) { ascii = false; break; }
 
-    // A one-letter query matches most of the library, so the exact ranking is
-    // done in C++ over a bounded candidate set rather than over every row. The
-    // SQL ordering puts title-prefix hits in that set first, so the candidates
-    // are the rows most likely to win anyway.
     QSqlQuery q(m_db);
-    q.prepare(QStringLiteral(
-        "SELECT * FROM tracks WHERE title LIKE :f OR artist LIKE :f OR album LIKE :f"
-        " ORDER BY (CASE WHEN title LIKE :pre THEN 0 WHEN artist LIKE :pre THEN 1"
-        "                WHEN album LIKE :pre THEN 2 ELSE 3 END),"
-        " artist, album, disc_no, track_no, title LIMIT 200"));
-    q.bindValue(QStringLiteral(":f"),   like);
-    q.bindValue(QStringLiteral(":pre"), QStringLiteral("%1%%").arg(needle));
+    if (ascii) {
+        q.prepare(QStringLiteral(
+            "SELECT id, title, artist, album FROM tracks"
+            " WHERE title LIKE :f ESCAPE '\\' OR artist LIKE :f ESCAPE '\\'"
+            " OR album LIKE :f ESCAPE '\\'"));
+        q.bindValue(QStringLiteral(":f"), QStringLiteral("%%%1%%").arg(escapeLike(needle)));
+    } else {
+        q.prepare(QStringLiteral("SELECT id, title, artist, album FROM tracks"));
+    }
     if (!q.exec()) return out;
 
-    QList<QPair<int, QVariantMap>> scored;
+    QList<QPair<int, qint64>> hits;
     while (q.next()) {
-        QVariantMap m = rowToMap(q);
-        const int s = MatchScore::score(m.value(QStringLiteral("title")).toString(),
-                                        {m.value(QStringLiteral("artists")).toString(),
-                                         m.value(QStringLiteral("albumTitle")).toString()},
-                                        lowered);
-        if (s < 0) continue;
-        m[QStringLiteral("_score")] = s;
-        scored.append({s, m});
+        const int s = MatchScore::score(q.value(1).toString(), q.value(2).toString(),
+                                        q.value(3).toString(), needle);
+        if (s >= 0) hits.append({s, q.value(0).toLongLong()});
     }
-    std::stable_sort(scored.begin(), scored.end(),
+    std::stable_sort(hits.begin(), hits.end(),
                      [](const auto &a, const auto &b) { return a.first > b.first; });
+    out[QStringLiteral("total")] = hits.size();
 
+    // Only the rows that survived the cap are turned into maps.
     QVariantList rows;
-    for (int i = 0; i < scored.size() && i < limit; ++i) rows.append(scored[i].second);
+    for (int i = 0; i < hits.size() && i < limit; ++i) {
+        QSqlQuery r(m_db);
+        r.prepare(QStringLiteral("SELECT * FROM tracks WHERE id = :id"));
+        r.bindValue(QStringLiteral(":id"), hits[i].second);
+        if (r.exec() && r.next()) {
+            QVariantMap m = rowToMap(r);
+            m[QStringLiteral("_score")] = hits[i].first;
+            rows.append(m);
+        }
+    }
     out[QStringLiteral("rows")] = rows;
     return out;
 }
@@ -217,14 +239,14 @@ QVariantMap LocalLibrary::searchPlaylists(const QString &query, int limit) const
     out[QStringLiteral("rows")]  = QVariantList();
     out[QStringLiteral("total")] = 0;
 
-    const QString lowered = query.trimmed().toLower();
-    if (lowered.isEmpty() || limit <= 0) return out;
+    const QString needle = query.trimmed();
+    if (needle.isEmpty() || limit <= 0) return out;
 
     // Local playlists are a handful, so the whole list is scored in place.
     QList<QPair<int, QVariantMap>> scored;
     for (const QVariant &v : playlists()) {
         QVariantMap m = v.toMap();
-        const int s = MatchScore::score(m.value(QStringLiteral("title")).toString(), {}, lowered);
+        const int s = MatchScore::score(m.value(QStringLiteral("title")).toString(), needle);
         if (s < 0) continue;
         m[QStringLiteral("_score")] = s;
         scored.append({s, m});

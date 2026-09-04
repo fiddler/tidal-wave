@@ -231,7 +231,9 @@ Rectangle {
     // page so the import progress card is on screen when the files land.
     function promptImportFiles()  { importDialog.open() }
     function promptImportFolder() { folderDialog.open() }
-    function promptNewPlaylist()  { newPlaylistPopup.open() }
+    // Cleared first, like the page's own button: the popup otherwise reopens
+    // holding the name of a creation that was cancelled.
+    function promptNewPlaylist()  { newPlaylistField.text = ""; newPlaylistPopup.open() }
 
     FileDialog {
         id: importDialog

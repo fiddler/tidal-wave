@@ -265,10 +265,14 @@ ApplicationWindow {
 
     // Import and local-playlist creation belong to the Local Files page, which
     // is also where their result shows up. Go there, then open the real dialog.
+    property string _pendingLocalCall: ""
     function _callOnLocalPage(fn) {
-        navigate("local", {})
+        // Already there: navigating again would force the same-page reload and
+        // throw away the page's scroll position just to open a dialog.
+        if (currentPage !== "local") navigate("local", {})
         var item = detailLoader.status === Loader.Ready ? detailLoader.item : null
         if (item && typeof item[fn] === "function") item[fn]()
+        else _pendingLocalCall = fn      // run it from detailLoader.onLoaded
     }
     function promptImportFiles()      { _callOnLocalPage("promptImportFiles") }
     function promptImportFolder()     { _callOnLocalPage("promptImportFolder") }
@@ -419,7 +423,12 @@ ApplicationWindow {
         Shortcut {
             sequence: "Escape"
             context: Qt.ApplicationShortcut
-            enabled: auth.state === 2
+            // An application shortcut is matched before the key reaches a
+            // Popup, so without this gate Escape would clear a selection or
+            // navigate the page underneath instead of closing whatever is
+            // open on top of it. Every popup listed here already has
+            // CloseOnEscape; the shortcut was simply taking the key first.
+            enabled: auth.state === 2 && !commandPalette.opened && !sideBar.popupOpen
             onActivated: {
                 var sel = root.currentSelection()
                 if (sel && sel.hasSelection) sel.clear()
@@ -534,6 +543,14 @@ ApplicationWindow {
                                 var params = root.pageParams
                                 root.pageParams = {}
                                 root.applyParams(item, params)
+                            }
+                            // A palette command that asked this page to open a
+                            // dialog before it existed. Without this the
+                            // command would look like it did nothing.
+                            if (root._pendingLocalCall.length > 0) {
+                                var fn = root._pendingLocalCall
+                                root._pendingLocalCall = ""
+                                if (item && typeof item[fn] === "function") item[fn]()
                             }
                         }
                     }
