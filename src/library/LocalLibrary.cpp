@@ -1,4 +1,5 @@
 #include "LocalLibrary.h"
+#include "../util/MatchScore.h"
 
 #include <algorithm>
 #include <QCryptographicHash>
@@ -158,6 +159,83 @@ QVariantList LocalLibrary::tracks(const QString &filter) const {
     }
     QVariantList out;
     if (q.exec()) while (q.next()) out.append(rowToMap(q));
+    return out;
+}
+
+QVariantMap LocalLibrary::searchTracks(const QString &query, int limit) const {
+    QVariantMap out;
+    out[QStringLiteral("rows")]  = QVariantList();
+    out[QStringLiteral("total")] = 0;
+
+    const QString needle = query.trimmed();
+    if (needle.isEmpty() || limit <= 0) return out;
+    const QString lowered = needle.toLower();
+    const QString like    = QStringLiteral("%%%1%%").arg(needle);
+
+    QSqlQuery count(m_db);
+    count.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM tracks WHERE title LIKE :f OR artist LIKE :f OR album LIKE :f"));
+    count.bindValue(QStringLiteral(":f"), like);
+    if (count.exec() && count.next()) out[QStringLiteral("total")] = count.value(0).toInt();
+
+    // A one-letter query matches most of the library, so the exact ranking is
+    // done in C++ over a bounded candidate set rather than over every row. The
+    // SQL ordering puts title-prefix hits in that set first, so the candidates
+    // are the rows most likely to win anyway.
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral(
+        "SELECT * FROM tracks WHERE title LIKE :f OR artist LIKE :f OR album LIKE :f"
+        " ORDER BY (CASE WHEN title LIKE :pre THEN 0 WHEN artist LIKE :pre THEN 1"
+        "                WHEN album LIKE :pre THEN 2 ELSE 3 END),"
+        " artist, album, disc_no, track_no, title LIMIT 200"));
+    q.bindValue(QStringLiteral(":f"),   like);
+    q.bindValue(QStringLiteral(":pre"), QStringLiteral("%1%%").arg(needle));
+    if (!q.exec()) return out;
+
+    QList<QPair<int, QVariantMap>> scored;
+    while (q.next()) {
+        QVariantMap m = rowToMap(q);
+        const int s = MatchScore::score(m.value(QStringLiteral("title")).toString(),
+                                        {m.value(QStringLiteral("artists")).toString(),
+                                         m.value(QStringLiteral("albumTitle")).toString()},
+                                        lowered);
+        if (s < 0) continue;
+        m[QStringLiteral("_score")] = s;
+        scored.append({s, m});
+    }
+    std::stable_sort(scored.begin(), scored.end(),
+                     [](const auto &a, const auto &b) { return a.first > b.first; });
+
+    QVariantList rows;
+    for (int i = 0; i < scored.size() && i < limit; ++i) rows.append(scored[i].second);
+    out[QStringLiteral("rows")] = rows;
+    return out;
+}
+
+QVariantMap LocalLibrary::searchPlaylists(const QString &query, int limit) const {
+    QVariantMap out;
+    out[QStringLiteral("rows")]  = QVariantList();
+    out[QStringLiteral("total")] = 0;
+
+    const QString lowered = query.trimmed().toLower();
+    if (lowered.isEmpty() || limit <= 0) return out;
+
+    // Local playlists are a handful, so the whole list is scored in place.
+    QList<QPair<int, QVariantMap>> scored;
+    for (const QVariant &v : playlists()) {
+        QVariantMap m = v.toMap();
+        const int s = MatchScore::score(m.value(QStringLiteral("title")).toString(), {}, lowered);
+        if (s < 0) continue;
+        m[QStringLiteral("_score")] = s;
+        scored.append({s, m});
+    }
+    std::stable_sort(scored.begin(), scored.end(),
+                     [](const auto &a, const auto &b) { return a.first > b.first; });
+
+    QVariantList rows;
+    for (int i = 0; i < scored.size() && i < limit; ++i) rows.append(scored[i].second);
+    out[QStringLiteral("rows")]  = rows;
+    out[QStringLiteral("total")] = scored.size();
     return out;
 }
 

@@ -1,9 +1,25 @@
 #include "TidalBridge.h"
+#include "../util/MatchScore.h"
 #include <QJSEngine>
 #include <QSettings>
 #include <QGuiApplication>
 #include <QClipboard>
 #include <QDebug>
+#include <algorithm>
+
+namespace {
+
+// One matched row: where it sits in the source list and how well it matched.
+struct Scored { int score; int index; };
+
+// Score descending, source order preserved within a tie — so equally-good
+// playlists stay in the order the sidebar shows them.
+void sortScored(QList<Scored> &v) {
+    std::stable_sort(v.begin(), v.end(),
+                     [](const Scored &a, const Scored &b) { return a.score > b.score; });
+}
+
+} // namespace
 
 TidalBridge::TidalBridge(TidalClient *client, QObject *parent)
     : QObject(parent), m_client(client)
@@ -533,6 +549,88 @@ QVariantList TidalBridge::searchFavoritePlaylists(const QString &query) const {
     }
     sortPlaylists(playlists);
     return playlistsList(playlists);
+}
+
+QVariantMap TidalBridge::searchLibrary(const QString &query, int limit) const {
+    QVariantMap out;
+    const QString q = query.trimmed().toLower();
+    if (q.isEmpty() || limit <= 0) return out;
+
+    // Playlists. Ordered by the sidebar's own sort first so equal scores come
+    // out in the order the user is used to seeing them.
+    {
+        QList<Playlist> pls = m_favoritePlaylists;
+        sortPlaylists(pls);
+        QList<Scored> hits;
+        for (int i = 0; i < pls.size(); ++i) {
+            const int s = MatchScore::score(pls[i].title, {}, q);
+            if (s >= 0) hits.append({s, i});
+        }
+        sortScored(hits);
+        QVariantList rows;
+        for (int i = 0; i < hits.size() && i < limit; ++i) {
+            QVariantMap m = playlistToMap(pls[hits[i].index]);
+            m[QStringLiteral("_score")] = hits[i].score;
+            rows.append(m);
+        }
+        out[QStringLiteral("playlists")]      = rows;
+        out[QStringLiteral("playlistsTotal")] = hits.size();
+    }
+
+    {
+        QList<Scored> hits;
+        for (int i = 0; i < m_favoriteArtists.size(); ++i) {
+            const int s = MatchScore::score(m_favoriteArtists[i].name, {}, q);
+            if (s >= 0) hits.append({s, i});
+        }
+        sortScored(hits);
+        QVariantList rows;
+        for (int i = 0; i < hits.size() && i < limit; ++i) {
+            QVariantMap m = artistToMap(m_favoriteArtists[hits[i].index]);
+            m[QStringLiteral("_score")] = hits[i].score;
+            rows.append(m);
+        }
+        out[QStringLiteral("artists")]      = rows;
+        out[QStringLiteral("artistsTotal")] = hits.size();
+    }
+
+    {
+        QList<Scored> hits;
+        for (int i = 0; i < m_favoriteAlbums.size(); ++i) {
+            const Album &a = m_favoriteAlbums[i];
+            const int s = MatchScore::score(a.title, {a.artistNames()}, q);
+            if (s >= 0) hits.append({s, i});
+        }
+        sortScored(hits);
+        QVariantList rows;
+        for (int i = 0; i < hits.size() && i < limit; ++i) {
+            QVariantMap m = albumToMap(m_favoriteAlbums[hits[i].index]);
+            m[QStringLiteral("_score")] = hits[i].score;
+            rows.append(m);
+        }
+        out[QStringLiteral("albums")]      = rows;
+        out[QStringLiteral("albumsTotal")] = hits.size();
+    }
+
+    {
+        QList<Scored> hits;
+        for (int i = 0; i < m_favoriteTracks.size(); ++i) {
+            const Track &t = m_favoriteTracks[i];
+            const int s = MatchScore::score(t.title, {t.artistNames(), t.album.title}, q);
+            if (s >= 0) hits.append({s, i});
+        }
+        sortScored(hits);
+        QVariantList rows;
+        for (int i = 0; i < hits.size() && i < limit; ++i) {
+            QVariantMap m = trackToMap(m_favoriteTracks[hits[i].index]);
+            m[QStringLiteral("_score")] = hits[i].score;
+            rows.append(m);
+        }
+        out[QStringLiteral("tracks")]      = rows;
+        out[QStringLiteral("tracksTotal")] = hits.size();
+    }
+
+    return out;
 }
 
 void TidalBridge::loadFavoriteTrackIds() {

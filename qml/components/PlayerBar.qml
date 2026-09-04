@@ -14,6 +14,10 @@ Rectangle {
     signal showQueue()
     signal showNowPlaying()
 
+    // The EQ panel is anchored to the button in this bar, so the command
+    // palette opens it from here rather than growing a second panel.
+    function openEqualizer() { eqPanel.open() }
+
     property var track: player.currentTrack  // QVariantMap
     // Local library tracks carry a negative id (never a valid Tidal one), so
     // this cannot test for a positive id: the bar read "No track playing", with

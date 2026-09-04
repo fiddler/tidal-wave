@@ -10,8 +10,10 @@ Rectangle {
 
     property string currentPage: "home"
     signal navigate(string page, var params)
+    signal openPalette()
 
-    function openSettings() { settingsPopup.open() }
+    function openSettings()    { settingsPopup.open() }
+    function openNewPlaylist() { createPlaylistPopup.open() }
 
     // Sort/filter preferences for the Tidal playlist list, persisted.
     Settings {
@@ -88,6 +90,60 @@ Rectangle {
         }
 
         Item { height: 24 }
+
+        // The only visible sign the palette exists. Nothing else in the window
+        // advertises Cmd+K.
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            Layout.preferredHeight: 34
+            radius: Theme.radius
+            color: paletteHov.hovered ? Theme.surfaceHov : Theme.surfaceHigh
+            border.color: paletteHov.hovered ? Theme.border : "transparent"
+            border.width: 1
+
+            Row {
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 8
+                spacing: 8
+
+                VectorIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "search"; width: 14; height: 14; strokeWidth: 1.8
+                    color: Theme.textDim
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - 14 - 8 - paletteKey.width - 8
+                    text: "Search or jump to…"
+                    color: Theme.textSec
+                    font.pixelSize: 12
+                    elide: Text.ElideRight
+                }
+                Rectangle {
+                    id: paletteKey
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: paletteKeyLabel.implicitWidth + 12
+                    height: 20
+                    radius: 5
+                    color: Theme.surface
+                    Text {
+                        id: paletteKeyLabel
+                        anchors.centerIn: parent
+                        text: Qt.platform.os === "osx" ? "⌘K" : "Ctrl+K"
+                        color: Theme.textDim
+                        font.pixelSize: 10
+                    }
+                }
+            }
+
+            HoverHandler { id: paletteHov; cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: root.openPalette() }
+        }
+
+        Item { height: 12 }
 
         SideNavItem {
             icon: "home"

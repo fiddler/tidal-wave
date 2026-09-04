@@ -29,6 +29,14 @@ Rectangle {
         searchBar.releaseFocus()
     }
 
+    // Set by the command palette through navigate(). Filling the field is
+    // enough — the field's own edit signal runs the search.
+    property string pendingQuery: ""
+    onPendingQueryChanged: {
+        if (pendingQuery.length === 0) return
+        searchBar.text = pendingQuery
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0

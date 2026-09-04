@@ -45,6 +45,13 @@ public:
     Q_INVOKABLE void removeTracks(const QVariantList &localIds);
     Q_INVOKABLE bool hasAudioUrls(const QList<QUrl> &urls) const;
 
+    // Ranked, capped searches for the command palette. Both return
+    // {rows, total} — at most `limit` maps, each carrying an extra "_score"
+    // so QML can merge them with the Tidal results, plus the true match count
+    // behind the cap. Scoring is MatchScore, the same rule TidalBridge uses.
+    Q_INVOKABLE QVariantMap searchTracks   (const QString &query, int limit = 6) const;
+    Q_INVOKABLE QVariantMap searchPlaylists(const QString &query, int limit = 6) const;
+
     // Re-resolves folder cover art for tracks that still have none. Pure
     // filesystem work (no ffmpeg), so it is cheap enough to run at startup and
     // backfill tracks imported before folder covers were supported. Returns the

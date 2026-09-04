@@ -76,6 +76,14 @@ public:
     Q_INVOKABLE QVariantList searchFavoriteArtists(const QString &query) const;
     Q_INVOKABLE QVariantList searchFavoritePlaylists(const QString &query) const;
 
+    // One ranked, capped pass over everything already in memory, for the
+    // command palette. Returns {playlists, artists, albums, tracks} — each a
+    // list of at most `limit` maps carrying an extra "_score" so QML can merge
+    // them with the local library's results — plus a *Total count per type for
+    // the "+N more" line. Runs on every keystroke, so it never allocates a map
+    // for a row it is going to drop.
+    Q_INVOKABLE QVariantMap searchLibrary(const QString &query, int limit = 6) const;
+
 signals:
     void preferredQualityChanged();
     void favoriteTracksChanged();

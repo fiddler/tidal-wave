@@ -76,6 +76,7 @@ set(HEADERS
     src/mpris/MprisPlayer.h
     src/ui/Application.h
     src/ui/ImageProvider.h
+    src/util/MatchScore.h
 )
 
 # Chromecast backend (Linux only — depends on Avahi).
@@ -159,6 +160,7 @@ qt_add_qml_module(tidal-wave
         qml/components/QueuePanel.qml
         qml/components/EqualizerPanel.qml
         qml/components/VectorIcon.qml
+        qml/components/CommandPalette.qml
         qml/pages/LoginPage.qml
         qml/pages/HomePage.qml
         qml/pages/SearchPage.qml

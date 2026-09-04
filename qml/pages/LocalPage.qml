@@ -227,6 +227,12 @@ Rectangle {
         }
     }
 
+    // Opened from here and from the command palette, which routes through this
+    // page so the import progress card is on screen when the files land.
+    function promptImportFiles()  { importDialog.open() }
+    function promptImportFolder() { folderDialog.open() }
+    function promptNewPlaylist()  { newPlaylistPopup.open() }
+
     FileDialog {
         id: importDialog
         title: "Add audio files"

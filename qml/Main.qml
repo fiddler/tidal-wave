@@ -246,6 +246,38 @@ ApplicationWindow {
                          previousPage, JSON.stringify(previousPageParams))
     }
 
+    // ─── Command palette hooks ─────────────────────────
+    // The palette drives the app through this window rather than reaching into
+    // pages itself. Everything it needs that isn't already public lives here.
+    function openSettings()    { sideBar.openSettings() }
+    function openNewPlaylist() { sideBar.openNewPlaylist() }
+
+    // The EQ panel hangs off the player bar's button, and the bar is hidden on
+    // Now Playing — so leave that page first, or the panel opens attached to
+    // something invisible.
+    function openEqualizer() {
+        if (currentPage === "nowplaying") {
+            if (previousPage === "nowplaying") navigate("home")
+            else                               goBack()
+        }
+        playerBar.openEqualizer()
+    }
+
+    // Import and local-playlist creation belong to the Local Files page, which
+    // is also where their result shows up. Go there, then open the real dialog.
+    function _callOnLocalPage(fn) {
+        navigate("local", {})
+        var item = detailLoader.status === Loader.Ready ? detailLoader.item : null
+        if (item && typeof item[fn] === "function") item[fn]()
+    }
+    function promptImportFiles()      { _callOnLocalPage("promptImportFiles") }
+    function promptImportFolder()     { _callOnLocalPage("promptImportFolder") }
+    function promptNewLocalPlaylist() { _callOnLocalPage("promptNewPlaylist") }
+
+    // Hands the palette's text to the Search page, which owns everything that
+    // talks to the Tidal API.
+    function searchFor(q) { navigate("search", { pendingQuery: q }) }
+
     // The TrackSelection of whichever page is showing, or null if that page has
     // no track list. Cmd+A and Escape both act through this.
     function currentSelection() {
@@ -363,6 +395,14 @@ ApplicationWindow {
             }
         }
         Shortcut { sequence: "Ctrl+Q"; context: Qt.ApplicationShortcut; enabled: auth.state === 2; onActivated: root.queueOpen = !root.queueOpen }
+        // Command palette. Ctrl+K is Cmd+K on macOS; Ctrl+P is the same door
+        // for anyone whose fingers learned it in an editor. Both toggle.
+        Shortcut {
+            sequences: ["Ctrl+K", "Ctrl+P"]
+            context: Qt.ApplicationShortcut
+            enabled: auth.state === 2
+            onActivated: commandPalette.opened ? commandPalette.close() : commandPalette.open()
+        }
         Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; enabled: auth.state === 2; onActivated: sideBar.openSettings() }
         // Select all tracks on the current page. StandardKey maps to Cmd+A on
         // macOS and Ctrl+A elsewhere. Suppressed while typing so it still
@@ -406,6 +446,7 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 currentPage: root.currentPage
                 onNavigate: function(page, params) { root.navigate(page, params) }
+                onOpenPalette: commandPalette.open()
             }
 
             Item {
@@ -525,11 +566,17 @@ ApplicationWindow {
         }
 
         PlayerBar {
+            id: playerBar
             visible:          auth.state === 2 && root.currentPage !== "nowplaying"
             Layout.fillWidth: true
             onShowQueue:      root.queueOpen = !root.queueOpen
             onShowNowPlaying: root.navigate("nowplaying")
         }
+    }
+
+    CommandPalette {
+        id: commandPalette
+        host: root
     }
 
     // Window-wide import target: drop audio files or folders anywhere to add
