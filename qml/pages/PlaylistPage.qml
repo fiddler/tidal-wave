@@ -22,6 +22,23 @@ Rectangle {
     property string playlistType: ""   // "USER" = editable, "" / "EDITORIAL" = read-only
     property var    tracks: []
     property bool   loading: false
+    property string loadError: ""
+    property int    _loadGeneration: 0
+
+    // Bound the whole load, including pagination. A network request may never
+    // call back, and a pinned playlist must remain usable while refreshing.
+    Timer {
+        id: loadDeadline
+        objectName: "playlistLoadDeadline"
+        interval: 15000
+        onTriggered: {
+            root._loadGeneration++
+            root.loading = false
+            root.loadError = root.tracks.length > 0
+                    ? "Couldn't refresh this playlist. Showing the saved copy."
+                    : "Loading timed out. Check your connection and try again."
+        }
+    }
 
     readonly property bool isUserPlaylist: playlistType === "USER"
 
@@ -83,8 +100,9 @@ Rectangle {
     // Refetch without raising the loading overlay — used to resync after a
     // failed write, where the server is the only trustworthy source.
     function silentReload() {
+        var generation = _loadGeneration
         bridge.fetchPlaylistTracks(playlistUuid, function(t, err) {
-            if (err) return
+            if (generation !== root._loadGeneration || err) return
             // Read the position here, not at call time: the user is free to
             // scroll while the request is in flight.
             var y = tracksList.contentY
@@ -155,13 +173,21 @@ Rectangle {
     }
 
     function loadPlaylist() {
-        loading = true
-        bridge.fetchPlaylistTracks(playlistUuid, function(t, err) {
-            loading = false
-            if (!err) { tracks = t; return }
-            // No network — a pinned playlist still renders from its stored copy.
-            var cached = offline.cachedTracks(playlistUuid)
-            if (cached.length > 0) tracks = cached
+        var generation = ++_loadGeneration
+        var uuid = playlistUuid
+        loadError = ""
+        tracks = offline.cachedTracks(uuid)
+        trackSel.clear()
+        loading = tracks.length === 0
+        loadDeadline.restart()
+        bridge.fetchPlaylistTracks(uuid, function(t, err) {
+            if (generation !== root._loadGeneration) return
+            loadDeadline.stop()
+            root.loading = false
+            if (!err) { root.tracks = t; return }
+            root.loadError = root.tracks.length > 0
+                    ? "Couldn't refresh this playlist. Showing the saved copy."
+                    : "Couldn't load this playlist. Check your connection and try again."
         })
     }
 
@@ -421,6 +447,35 @@ Rectangle {
     }
 
     LoadingOverlay { loading: root.loading }
+
+    Rectangle {
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: root.tracks.length > 0 ? parent.height - height - 24
+                                 : Math.max(250, (parent.height - height) / 2)
+        width: Math.min(420, parent.width - 48)
+        height: loadErrorContent.implicitHeight + 32
+        radius: Theme.radius
+        color: Theme.surfaceHigh
+        visible: root.loadError.length > 0
+
+        Column {
+            id: loadErrorContent
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
+            spacing: 12
+            Text {
+                width: parent.width
+                text: root.loadError
+                color: Theme.textSec
+                font.pixelSize: 14
+                wrapMode: Text.WordWrap
+            }
+            PillButton {
+                objectName: "playlistLoadRetry"
+                text: "Retry"
+                onClicked: root.loadPlaylist()
+            }
+        }
+    }
 
     // Edit playlist popup
     Popup {
