@@ -44,6 +44,13 @@ void Player::initAudio() {
             this, &Player::onPlaybackStateChanged);
     connect(m_player, &MpvAudio::errorOccurred,
             this, &Player::onErrorOccurred);
+    connect(m_player, &MpvAudio::playbackStalled, this, [this]() {
+        // MpvAudio wrote a snapshot before emitting this. Reopen only mpv's
+        // output; never restart coreaudiod automatically because that destroys
+        // the system-side evidence we need for the incident bundle.
+        if (m_player)
+            m_player->reloadAudioOutput(QStringLiteral("position-frozen-10s"));
+    });
     connect(m_player, &MpvAudio::positionChanged, this, [this](qint64 pos) {
         qint64 dur = m_player->duration();
         if (dur > 10000 && pos > 0 && (dur - pos) <= 10000)
@@ -102,7 +109,12 @@ void Player::setLoading(bool l) {
         m_loadWatchdog->setSingleShot(true);
         m_loadWatchdog->setInterval(30'000);
         connect(m_loadWatchdog, &QTimer::timeout, this, [this]() {
-            qWarning() << "[play] still loading after 30s — clearing the state";
+            qWarning() << "[play] still loading after 30s; capturing diagnostics"
+                          " and reloading the audio output";
+            if (m_player) {
+                m_player->captureDiagnostics(QStringLiteral("loading-30s"));
+                m_player->reloadAudioOutput(QStringLiteral("loading-30s"));
+            }
             setLoading(false);
         });
     }
@@ -660,6 +672,7 @@ void Player::onPlaybackStateChanged(MpvAudio::State state) {
 
 void Player::onErrorOccurred(const QString &msg) {
     setLoading(false);
+    if (m_player) m_player->captureDiagnostics(QStringLiteral("player-error"));
     qWarning() << "Player error:" << msg;
     emit error(msg);
 }
@@ -920,4 +933,3 @@ void Player::restoreSession(qint64 uid) {
     emit durationChanged(duration());
     emit positionChanged(m_pendingSeekMs);
 }
-

@@ -49,6 +49,7 @@ set(SOURCES
     src/player/Player.cpp
     src/player/Equalizer.cpp
     src/player/MpvAudio.cpp
+    src/player/PlaybackDiagnostics.cpp
     src/player/DashFetcher.cpp
     src/player/DashStream.cpp
     src/player/Downloader.cpp
@@ -68,6 +69,7 @@ set(HEADERS
     src/player/Player.h
     src/player/Equalizer.h
     src/player/MpvAudio.h
+    src/player/PlaybackDiagnostics.h
     src/player/DashFetcher.h
     src/player/DashStream.h
     src/player/Downloader.h

@@ -77,3 +77,4 @@ Thumbs.db
 /*.tar.gz
 /*.zip
 /aqtinstall.log
+/diagnostics/

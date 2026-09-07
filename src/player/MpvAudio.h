@@ -1,7 +1,9 @@
 #pragma once
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 #include <QUrl>
+#include <QVariantMap>
 
 struct mpv_handle;
 class QTimer;
@@ -57,12 +59,22 @@ public:
     // sticks across loadfile calls, so one set covers all future tracks.
     void   setAudioFilter(const QString &af);
 
+    // Cached state only. These never make synchronous libmpv calls, which is
+    // important when the mpv core or CoreAudio is the thing that is stuck.
+    QVariantMap diagnosticSnapshot() const;
+    void captureDiagnostics(const QString &reason) const;
+
+    // Reopens mpv's audio output without restarting the app or coreaudiod.
+    // Returns whether the command was accepted for asynchronous execution.
+    bool reloadAudioOutput(const QString &reason);
+
 signals:
     void mediaStatusChanged(Status status);
     void playbackStateChanged(State state);
     void errorOccurred(const QString &msg);
     void positionChanged(qint64 ms);
     void durationChanged(qint64 ms);
+    void playbackStalled();
 
 private slots:
     // Drains every queued libmpv event. Invoked queued from mpv's own thread.
@@ -72,8 +84,7 @@ private slots:
 private:
     void setState(State s);
     void updateState();
-    double getDouble(const char *name) const;
-    bool   getFlag(const char *name) const;
+    void recordDiagnostic(const QString &event, QVariantMap fields = {}) const;
 
     mpv_handle *m_mpv = nullptr;
     QTimer     *m_poll = nullptr;
@@ -82,6 +93,31 @@ private:
     bool   m_muted  = false;
     bool   m_idle   = true;
     bool   m_paused = false;
+    bool   m_pausedForCache = false;
+    bool   m_coreIdle = false;
+    bool   m_eofReached = false;
+    bool   m_fileLoaded = false;
+    bool   m_playbackRestarted = false;
+    bool   m_stallReported = false;
+    bool   m_recoveryAttempted = false;
+    qint64 m_cacheBufferingState = -1;
+    qint64 m_audioSampleRate = -1;
+    QString m_audioChannels;
+    QString m_audioFormat;
+    QString m_currentAo;
+    QString m_audioDevice;
+    QString m_sourceScheme;
+    QString m_mediaStatus = QStringLiteral("none");
+    QString m_sessionId;
+    quint64 m_loadSerial = 0;
+    quint64 m_audioReloadCount = 0;
+    quint64 m_pendingReloadRequest = 0;
+    quint64 m_queryCounter = 0;
+    quint64 m_positionRequest = 0;
+    quint64 m_durationRequest = 0;
+    QElapsedTimer m_clock;
+    qint64 m_sourceRequestedAtMs = -1;
+    qint64 m_lastProgressAtMs = -1;
     qint64 m_lastPosition = -1;
     qint64 m_lastDuration = -1;
 };
