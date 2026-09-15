@@ -161,7 +161,17 @@ Rectangle {
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter; spacing: 8
 
-                IconButton { icon: "shuffle"; size: 18; iconColor: player.shuffle ? Theme.accent : Theme.textSec; onClicked: player.setShuffle(!player.shuffle) }
+                IconButton {
+                    icon: "shuffle"
+                    size: 18
+                    iconColor: player.shuffle ? Theme.accent : Theme.textSec
+                    ToolTip.visible: shuffleTipHov.hovered
+                    ToolTip.text: player.shuffle ? "Shuffle on: play tracks in random order"
+                        : "Shuffle off: play tracks in queue order"
+                    ToolTip.delay: 600
+                    HoverHandler { id: shuffleTipHov }
+                    onClicked: player.setShuffle(!player.shuffle)
+                }
                 IconButton { icon: "previous"; size: 22; iconColor: Theme.textPrimary; onClicked: player.previous() }
 
                 Rectangle {
@@ -196,6 +206,12 @@ Rectangle {
                     icon: player.repeatMode === 2 ? "repeat-one" : "repeat"
                     size: 18
                     iconColor: player.repeatMode > 0 ? Theme.accent : Theme.textSec
+                    ToolTip.visible: repeatTipHov.hovered
+                    ToolTip.text: player.repeatMode === 2 ? "Repeat one: repeat the current track"
+                        : player.repeatMode === 1 ? "Repeat all: repeat the queue"
+                        : "Repeat off: stop at the end of the queue"
+                    ToolTip.delay: 600
+                    HoverHandler { id: repeatTipHov }
                     onClicked: player.setRepeatMode((player.repeatMode + 1) % 3)
                 }
             }

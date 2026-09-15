@@ -834,7 +834,17 @@ Rectangle {
 
                 RowLayout {
                     Layout.fillWidth: true; spacing: 16
-                    CtrlBtn { icon: "shuffle"; size: 24; active: player.shuffle; onClicked: player.setShuffle(!player.shuffle) }
+                    CtrlBtn {
+                        icon: "shuffle"
+                        size: 24
+                        active: player.shuffle
+                        ToolTip.visible: shuffleTipHov.hovered
+                        ToolTip.text: player.shuffle ? "Shuffle on: play tracks in random order"
+                            : "Shuffle off: play tracks in queue order"
+                        ToolTip.delay: 600
+                        HoverHandler { id: shuffleTipHov }
+                        onClicked: player.setShuffle(!player.shuffle)
+                    }
                     Item { Layout.fillWidth: true }
                     CtrlBtn { icon: "previous"; size: 28; onClicked: player.previous() }
                     Rectangle {
@@ -859,7 +869,18 @@ Rectangle {
                     }
                     CtrlBtn { icon: "next"; size: 28; onClicked: player.next() }
                     Item { Layout.fillWidth: true }
-                    CtrlBtn { icon: player.repeatMode === 2 ? "repeat-one" : "repeat"; size: 24; active: player.repeatMode > 0; onClicked: player.setRepeatMode((player.repeatMode + 1) % 3) }
+                    CtrlBtn {
+                        icon: player.repeatMode === 2 ? "repeat-one" : "repeat"
+                        size: 24
+                        active: player.repeatMode > 0
+                        ToolTip.visible: repeatTipHov.hovered
+                        ToolTip.text: player.repeatMode === 2 ? "Repeat one: repeat the current track"
+                            : player.repeatMode === 1 ? "Repeat all: repeat the queue"
+                            : "Repeat off: stop at the end of the queue"
+                        ToolTip.delay: 600
+                        HoverHandler { id: repeatTipHov }
+                        onClicked: player.setRepeatMode((player.repeatMode + 1) % 3)
+                    }
                 }
 
                 RowLayout {
