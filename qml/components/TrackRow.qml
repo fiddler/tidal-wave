@@ -50,7 +50,7 @@ Item {
     readonly property bool selected: (selection && trackData)
                                      ? selection.isSelected(trackData.id) : false
 
-    property bool   isLiked: (trackData && !trackData.localPath) ? bridge.isTrackFavorite(trackData.id) : false
+    property bool   isLiked: false
     // Playlist context: set when TrackRow is inside a PlaylistPage
     property string playlistUuid: ""
     property int    trackItemIndex: -1  // 0-based position in playlist
@@ -59,11 +59,13 @@ Item {
     property string dlState: "idle"
     property string dlError: ""
 
+    function updateLikedState() {
+        isLiked = (trackData && !isLocalTrack) ? bridge.isTrackFavorite(trackData.id) : false
+    }
+
     Connections {
         target: bridge
-        function onFavoriteTracksChanged() {
-            root.isLiked = (root.trackData && !root.trackData.localPath) ? bridge.isTrackFavorite(root.trackData.id) : false
-        }
+        function onFavoriteTracksChanged() { root.updateLikedState() }
     }
 
     // Reflect download progress for this track. Delegates are recycled on scroll,
@@ -82,6 +84,7 @@ Item {
     }
     Timer { id: dlResetTimer; interval: 3000; onTriggered: root.dlState = "idle" }
     onTrackDataChanged: {
+        root.updateLikedState()
         root.dlState = (root.trackData && downloader.isDownloading(root.trackData.id)) ? "busy" : "idle"
         root.dlError = ""
     }
@@ -363,6 +366,23 @@ Item {
                     // cursor, so this has to follow isLink too.
                     cursorShape: albumText.isLink ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: Window.window.navigate("album", { albumId: root.trackData.albumId })
+                }
+            }
+
+            // Reserve space so liked and unliked tracks keep their durations aligned.
+            Item {
+                visible: !root.isLocalTrack
+                Layout.preferredWidth: 16
+                Layout.preferredHeight: 16
+                Layout.alignment: Qt.AlignVCenter
+
+                VectorIcon {
+                    anchors.fill: parent
+                    visible: root.isLiked
+                    name: "heart-filled"
+                    color: Theme.accent
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: "Liked track"
                 }
             }
 

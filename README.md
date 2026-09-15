@@ -2,9 +2,16 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 
 # Tidal Wave Desktop Client
 
-> **This is a fork** of [immineal/tidal-wave](https://github.com/immineal/tidal-wave)
-> (branch `extended`, with `main` kept as a clean upstream mirror). On top of
-> upstream it adds:
+> **Tidal Wave was created by [immineal](https://github.com/immineal).**
+> This is a macOS-focused fork of [their original project](https://github.com/immineal/tidal-wave),
+> which provides the app and foundation these changes build on.
+>
+> I use Tidal Wave as a native TIDAL client for Mac, and macOS is where I test
+> and improve this fork. Many of the additions below focus on Mac playback and
+> desktop integration; Linux and Windows changes are not routinely tested here.
+>
+> Development is on `extended`, with `main` kept as a clean upstream mirror.
+> On top of upstream, this fork adds:
 >
 > - **Offline playlists** — pin a playlist for offline playback, synced at
 >   listening speed with size/time estimates, resumable, with cached cover art
