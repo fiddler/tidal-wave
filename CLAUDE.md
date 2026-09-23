@@ -115,6 +115,27 @@ the failure at the mpv/CoreAudio boundary but does not prove whether the daemon,
 driver owned the deadlock. The recorder and paired stack samples were added to resolve that next
 time.
 
+### Crackle, not a jam
+
+A different shape, and the recorder does not catch it. Crackling or clicking on **any** cmd-tab,
+whichever apps the switch is between, audio from any source. The recorder only detects loading for
+30 seconds and a frozen position for 10, so a glitch of a few milliseconds never trips it, and mpv
+prints `Audio device underrun detected` only for gaps far larger. Expect a clean `playback.jsonl`
+while the user hears it.
+
+On 2026-09-12 `sudo killall coreaudiod` cleared it at once. Second time the fault has landed at that
+boundary after 2026-08-28, so go there early rather than reading the app's logs for an hour.
+
+Three things that look like leads and are not. Tidal Wave idles around 2.7% CPU with its real-time
+audio thread barely used, so it is not starving its own callback. The activation path touches no
+audio: `applicationStateChanged` re-shows the window (`Application.cpp:254`) and moves the position
+poll from 1000ms to 200ms (`MpvAudio.cpp:178`). And a burst of 50 `creating DSPProcessor` /
+`DSPProcessor destroyed` pairs in the `coreaudiod` log is a **track change**, not a switch — a new AO
+open makes macOS re-enumerate the DSP chain of every audio-capable app on the machine.
+
+The isolation test, which needs no synthetic input: `afplay` a sine tone. It has no window, so
+nothing about app switching involves it. If the tone crackles too, the app is a bystander.
+
 **libmpv internals** (filter chain, AO format): the permanent playback recorder already requests
 verbose mpv messages and persists selected `ao`, `cplayer`, `cache`, `demux`, `ffmpeg`, and `stream`
 prefixes. Extend `keepMpvLogPrefix()` in `MpvAudio.cpp` temporarily if another prefix is needed;
