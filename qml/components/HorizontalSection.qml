@@ -132,6 +132,7 @@ Item {
                     title:     modelData.title     || ""
                     subtitle:  modelData.subtitle  || ""
                     artistId:  modelData.artistId || 0
+                    mediaId:   modelData.id || 0
                     mediaType: root.mediaType
                     cardSize:  root.cardSize
                     onClicked:         root.itemClicked(index, modelData)

@@ -678,8 +678,11 @@ ApplicationWindow {
             Text {
                 id: hintText
                 anchors.centerIn: parent
-                text: (root.currentPage === "localplaylist")
-                      ? "Drop to add to this playlist"
+                // A Tidal playlist cannot hold a file from disk, and the
+                // drop still imports — say where the tracks are actually
+                // going rather than letting the page imply the playlist.
+                text: root.currentPage === "localplaylist" ? "Drop to add to this playlist"
+                      : root.currentPage === "playlist"    ? "A Tidal playlist can’t hold files — drop to add to your local library"
                       : "Drop to add to your local library"
                 color: Theme.textPrimary
                 font.pixelSize: 15
@@ -740,9 +743,9 @@ ApplicationWindow {
     }
 
     // ── track drag ghost ───────────────────────────────
-    // One shared ghost for the whole window. TrackRow borrows it while a drag
-    // is in flight; drop targets read `drag.source.payload` and
-    // `drag.source.kind` off it.
+    // One shared ghost for the whole window. TrackRow and MediaCard borrow it
+    // while a drag is in flight; drop targets read `drag.source.kind` off it,
+    // then `payload` (tracks) or `albumId` (a whole album).
     property alias dragLayer: dragLayer
 
     Item {
@@ -767,6 +770,18 @@ ApplicationWindow {
             ghost.owner   = owner
             return ghost
         }
+        // An album drag carries its id, not its tracks: the track list is
+        // fetched by whatever accepts the drop, so merely picking a card up
+        // costs no request.
+        function acquireAlbum(albumId, title, owner) {
+            if (!albumId) return null
+            ghost.payload    = []
+            ghost.kind       = "album"
+            ghost.albumId    = albumId
+            ghost.albumTitle = title || ""
+            ghost.owner      = owner
+            return ghost
+        }
         // Publish the state before the ghost goes live: showing it sets
         // Drag.active, and Qt delivers DragEnter synchronously from that
         // assignment, so a target reading DragState must already see it.
@@ -788,10 +803,12 @@ ApplicationWindow {
         // both halves here is what keeps that from leaving the state stuck on.
         function release(owner) {
             if (owner && ghost.owner !== owner) return
-            ghost.visible = false
-            ghost.payload = []
-            ghost.kind    = ""
-            ghost.owner   = null
+            ghost.visible    = false
+            ghost.payload    = []
+            ghost.kind       = ""
+            ghost.albumId    = 0
+            ghost.albumTitle = ""
+            ghost.owner      = null
             DragState.end()
         }
 
@@ -803,6 +820,8 @@ ApplicationWindow {
 
             property var    payload: []
             property string kind: ""
+            property var    albumId: 0     // kind "album" only
+            property string albumTitle: ""
             property Item   owner: null   // the row that borrowed the ghost
 
             // Reported so targets can react to proximity, not just contact.
@@ -837,8 +856,14 @@ ApplicationWindow {
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: ghost.payload.length === 1 ? "1 track"
-                                                     : ghost.payload.length + " tracks"
+                    text: ghost.kind === "album"
+                          ? (ghost.albumTitle.length > 0 ? ghost.albumTitle : "Album")
+                          : ghost.payload.length === 1 ? "1 track"
+                                                       : ghost.payload.length + " tracks"
+                    // A long album title would otherwise stretch the pill
+                    // across half the window.
+                    width: Math.min(implicitWidth, 220)
+                    elide: Text.ElideRight
                     color: "white"
                     font.pixelSize: 13
                     font.bold: true

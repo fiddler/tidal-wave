@@ -2,6 +2,7 @@ import QtCore
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import TidalWave
 
 Rectangle {
@@ -293,12 +294,57 @@ Rectangle {
             model: ListModel { id: playlistModel }
 
             // Shared by the row drop targets and the edge sensors above.
+            // A track drag carries its tracks; an album drag carries only an
+            // id, so the album is read here, on drop, rather than on every
+            // card the pointer passes over.
             function addTracksAt(index, source) {
                 if (index < 0 || index >= playlistModel.count) return
-                if (!source || source.kind !== "tidal") return
-                var ids = []
-                for (var i = 0; i < source.payload.length; i++) ids.push(source.payload[i].id)
-                bridge.addTracksToPlaylist(playlistModel.get(index).uuid, ids, function(ok) {})
+                if (!source || !playlistList.accepts(source)) return
+                // Copied out before anything async: the drag is torn down as
+                // soon as this returns, and the model row can be replaced by a
+                // reload under a pending request.
+                var uuid  = playlistModel.get(index).uuid
+                var title = playlistModel.get(index).title
+                if (source.kind === "album") {
+                    var albumId = source.albumId
+                    SyncState.begin("Adding album to " + title)
+                    bridge.fetchAlbumTracks(albumId, function(tracks, err) {
+                        if (err || !tracks || tracks.length === 0) {
+                            SyncState.fail(err && err.length > 0 ? err : "Could not read that album")
+                            return
+                        }
+                        var ids = []
+                        for (var i = 0; i < tracks.length; i++) ids.push(tracks[i].id)
+                        playlistList.postTracks(uuid, ids)
+                    })
+                    return
+                }
+                var trackIds = []
+                for (var j = 0; j < source.payload.length; j++) trackIds.push(source.payload[j].id)
+                if (trackIds.length === 0) return
+                SyncState.begin("Adding to " + title)
+                playlistList.postTracks(uuid, trackIds)
+            }
+
+            function postTracks(uuid, ids) {
+                bridge.addTracksToPlaylist(uuid, ids, function(ok) {
+                    if (ok) SyncState.end()
+                    else    SyncState.fail("Could not add to that playlist")
+                })
+            }
+
+            // Tidal playlists take Tidal tracks and Tidal albums. A local file
+            // has no Tidal id, so the API could not accept it.
+            function accepts(source) {
+                return !!source && (source.kind === "tidal" || source.kind === "album")
+            }
+
+            // A local file has no Tidal id, so the API has nothing to POST.
+            // Rejecting the drag outright made the row look inert, which read
+            // as a broken drop rather than an impossible one — so the row
+            // takes the drop and says why it cannot keep it.
+            function refuses(source) {
+                return !!source && source.kind === "local"
             }
 
             delegate: Item {
@@ -332,17 +378,23 @@ Rectangle {
                 Keys.onReturnPressed: activate()
                 Keys.onSpacePressed:  activate()
 
-                // Tidal playlists take Tidal tracks only. A local file has no
-                // Tidal id, so the API could not accept it.
                 DropArea {
                     id: plDrop
                     anchors.fill: parent
                     keys: ["tidalwave/tracks"]
-                    property bool willAccept: containsDrag && drag.source
-                                              && drag.source.kind === "tidal"
-                    onEntered: (d) => { if (!d.source || d.source.kind !== "tidal") d.accepted = false }
+                    property bool willAccept: containsDrag && playlistList.accepts(drag.source)
+                    property bool willRefuse: containsDrag && playlistList.refuses(drag.source)
+                    onEntered: (d) => {
+                        if (!playlistList.accepts(d.source) && !playlistList.refuses(d.source))
+                            d.accepted = false
+                    }
                     onDropped: (d) => {
-                        if (!d.source || d.source.kind !== "tidal") { d.accepted = false; return }
+                        if (playlistList.refuses(d.source)) {
+                            Window.window.warn("Local files can’t go in a Tidal playlist — use a local playlist")
+                            d.accept()
+                            return
+                        }
+                        if (!playlistList.accepts(d.source)) { d.accepted = false; return }
                         playlistList.addTracksAt(plDelegate.rowIndex, d.source)
                         d.accept()
                     }
@@ -354,9 +406,11 @@ Rectangle {
                     anchors.margins: 2
                     radius: 6
                     color: plDrop.willAccept ? Qt.rgba(0, 0.698, 0.973, 0.28)
+                           : plDrop.willRefuse ? Qt.rgba(Theme.red.r, Theme.red.g, Theme.red.b, 0.18)
                            : plHov.hovered ? Theme.surfaceHov : "transparent"
-                    border.width: plDrop.willAccept ? 1 : (plDelegate.activeFocus ? 2 : 0)
-                    border.color: Theme.accent
+                    border.width: (plDrop.willAccept || plDrop.willRefuse) ? 1
+                                  : (plDelegate.activeFocus ? 2 : 0)
+                    border.color: plDrop.willRefuse ? Theme.red : Theme.accent
                     HoverHandler { id: plHov }
                     TapHandler {
                         onTapped: plDelegate.activate()
@@ -543,9 +597,18 @@ Rectangle {
                     keys: ["tidalwave/tracks"]
                     property bool willAccept: containsDrag && drag.source
                                               && drag.source.kind === "local"
-                    onEntered: (d) => { if (!d.source || d.source.kind !== "local") d.accepted = false }
+                    // Same courtesy in the other direction: a Tidal track or
+                    // album has no file on disk to point playlist_items at.
+                    property bool willRefuse: containsDrag && drag.source
+                                              && drag.source.kind !== "local"
+                    onEntered: (d) => { if (!d.source) d.accepted = false }
                     onDropped: (d) => {
-                        if (!d.source || d.source.kind !== "local") { d.accepted = false; return }
+                        if (!d.source) { d.accepted = false; return }
+                        if (d.source.kind !== "local") {
+                            Window.window.warn("A local playlist holds files from disk — Tidal tracks can’t join it")
+                            d.accept()
+                            return
+                        }
                         localPlaylistList.addTracksAt(lplDelegate.rowIndex, d.source)
                         d.accept()
                     }
@@ -556,9 +619,11 @@ Rectangle {
                     anchors.margins: 2
                     radius: 6
                     color: lplDrop.willAccept ? Qt.rgba(0, 0.698, 0.973, 0.28)
+                           : lplDrop.willRefuse ? Qt.rgba(Theme.red.r, Theme.red.g, Theme.red.b, 0.18)
                            : lplHov.hovered ? Theme.surfaceHov : "transparent"
-                    border.width: lplDrop.willAccept ? 1 : (lplDelegate.activeFocus ? 2 : 0)
-                    border.color: Theme.accent
+                    border.width: (lplDrop.willAccept || lplDrop.willRefuse) ? 1
+                                  : (lplDelegate.activeFocus ? 2 : 0)
+                    border.color: lplDrop.willRefuse ? Theme.red : Theme.accent
                     HoverHandler { id: lplHov }
                     TapHandler { onTapped: lplDelegate.activate() }
 

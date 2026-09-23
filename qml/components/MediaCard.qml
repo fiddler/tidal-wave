@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 import TidalWave
 
 Item {
@@ -14,6 +15,9 @@ Item {
     // is not one artist — a mix's blurb, "16 tracks", a release year — leave
     // it at 0 and the subtitle stays plain text.
     property int    artistId: 0
+    // The id of what the card shows. Only albums use it, to be dragged onto a
+    // playlist; a card left at 0 simply cannot be dragged.
+    property var    mediaId: 0
 
     width: cardSize
     height: col.height + 8
@@ -21,6 +25,53 @@ Item {
     signal clicked()
     signal playClicked()
     signal subtitleClicked()
+
+    // ── drag source ────────────────────────────────────
+    // An album can be dropped on a playlist in the sidebar. The drag carries
+    // the album id only; its tracks are fetched by the drop target. The
+    // dragged item is the window's shared ghost rather than this card, which
+    // its view would clip and recycle mid-drag.
+    readonly property bool draggable: mediaType === "album" && Number(mediaId) > 0
+    property Item dragProxy: null
+    // Looked up on press and remembered: teardown can run while the card is
+    // being destroyed, and `Window.window` is already null by then.
+    property Item dragLayer: null
+    property bool didDrag: false          // true once a press became a drag
+
+    function beginDrag(mouse) {
+        if (!root.draggable) return
+        var layer = Window.window ? Window.window.dragLayer : null
+        if (!layer) return
+        root.dragProxy = layer.acquireAlbum(root.mediaId, root.title, root)
+        if (!root.dragProxy) return
+        root.dragLayer = layer
+        // Drop targets are hit-tested against the proxy's origin, so it starts
+        // pinned to the cursor.
+        var p = coverArea.mapToItem(layer, mouse.x, mouse.y)
+        root.dragProxy.x = p.x
+        root.dragProxy.y = p.y
+    }
+
+    function endDrag(deliver) {
+        var layer = root.dragLayer
+        if (layer && root.dragProxy && deliver) layer.drop(root)   // deliver, then tear down
+        root.dragProxy = null
+        if (layer) layer.release(root)
+    }
+
+    readonly property bool dragActive: coverArea.drag.active
+    onDragActiveChanged: {
+        var layer = root.dragLayer
+        if (!layer) return
+        if (root.dragActive) { root.didDrag = true; layer.show() }
+        else                  layer.release(root)
+    }
+
+    // A card is a view delegate: navigating away destroys it mid-drag, and
+    // nothing else would release the ghost then.
+    Component.onDestruction: {
+        if (root.dragProxy && root.dragLayer) root.dragLayer.release(root)
+    }
 
     activeFocusOnTab: true
     Keys.onReturnPressed: root.clicked()
@@ -89,12 +140,41 @@ Item {
                     scale: playHov.hovered ? 1.05 : 1
                     Behavior on scale { NumberAnimation { duration: 100 } }
                     HoverHandler { id: playHov; cursorShape: Qt.PointingHandCursor }
-                    TapHandler   { onTapped: root.playClicked() }
+                    // A MouseArea, not a TapHandler: it has to take the press
+                    // away from the cover's drag area underneath, which a
+                    // handler sharing the press would not do. hoverEnabled
+                    // stays off so the hover handlers around it keep working.
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: root.playClicked()
+                    }
                 }
             }
 
             HoverHandler { id: hov; cursorShape: Qt.PointingHandCursor }
-            TapHandler   { onTapped: root.clicked() }
+
+            // Click opens the card; on an album, a press that crosses the drag
+            // threshold starts a drag instead. hoverEnabled is left off so the
+            // hover handlers keep the overlay and the cursor.
+            MouseArea {
+                id: coverArea
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                drag.target: root.draggable ? root.dragProxy : null
+                drag.threshold: 8
+                // The rows and grids these cards sit in are Flickables, and
+                // one would steal the grab the moment the pointer moves along
+                // its scroll axis.
+                preventStealing: root.draggable
+
+                onPressed: (mouse) => {
+                    root.didDrag = false
+                    root.beginDrag(mouse)
+                }
+                onReleased: root.endDrag(true)    // a real release drops
+                onCanceled: root.endDrag(false)   // a cancelled grab does not
+                onClicked: { if (!root.didDrag) root.clicked() }
+            }
         }
 
         ColumnLayout {

@@ -2,6 +2,18 @@
 
 ## 2026-09-23
 
+### Added
+
+- Albums can be dragged onto a playlist in the sidebar, from an artist's
+  discography, search results, the home rows and the album collection. The
+  album's tracks are fetched only when it is dropped.
+- Adding tracks or an album to a playlist by drag reports progress and failures
+  in the corner indicator instead of silently.
+- A drop that cannot be kept says why instead of looking inert. Local files
+  dropped on a Tidal playlist, or Tidal tracks dropped on a local playlist, tint
+  the row red and explain the mismatch; dropping audio files while a Tidal
+  playlist is open says the tracks are going to the local library.
+
 ### Fixed
 
 - Importing local files works when the app is launched from Finder or the Dock.

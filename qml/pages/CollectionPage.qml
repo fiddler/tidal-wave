@@ -238,6 +238,7 @@ Rectangle {
                     coverUrl: modelData.coverUrl
                     mediaType: "album"
                     artistId: modelData.artistId || 0
+                    mediaId: modelData.id || 0
                     onClicked: navigateTo("album", { albumId: modelData.id })
                     onSubtitleClicked: navigateTo("artist", { artistId: modelData.artistId })
                     onPlayClicked: {
