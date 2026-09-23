@@ -33,6 +33,11 @@
   performer was scattered across the list. Tracks now carry an album artist,
   read from the tag on import and filled in for existing libraries from the
   album's own tracks.
+- A time zone change no longer signs you out. The token expiry was saved in
+  local time without an offset, so after a change an expired token read as
+  valid, Tidal refused it, and the app dropped to the login page while
+  holding a good refresh token. The expiry is now saved in UTC, and a refused
+  session check tries one refresh before signing out.
 
 ## 2026-09-07
 
