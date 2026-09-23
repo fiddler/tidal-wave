@@ -96,6 +96,9 @@ private:
     QTimer    *m_retryTimer;
     int        m_retryDelayMs = 0;
     bool       m_offline      = false;
+    // A session check refused the access token, and one refresh is under way
+    // to settle it. Cleared by a session that checks out or a hold that ends.
+    bool       m_sessionRefreshTried = false;
     State      m_state = State::LoggedOut;
 
     QString m_deviceCode;

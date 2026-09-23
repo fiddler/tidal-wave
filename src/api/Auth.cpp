@@ -50,6 +50,7 @@ bool Auth::isApiRejection(int httpStatus) {
 void Auth::endHold() {
     m_retryTimer->stop();
     m_retryDelayMs = 0;
+    m_sessionRefreshTried = false;
     setOffline(false);
 }
 
@@ -329,7 +330,9 @@ void Auth::refreshAccessToken() {
         // is already LoggedIn but was never checked, so its identity and its
         // user-scoped data are still missing. Only fetchSession() fills those
         // in and reports the recovery.
-        if (m_state != State::LoggedIn || m_offline) {
+        // And a refresh that a refused session check asked for: that check
+        // still has to pass before anything counts as signed in.
+        if (m_state != State::LoggedIn || m_offline || m_sessionRefreshTried) {
             fetchSession();
             return;
         }
@@ -346,6 +349,18 @@ void Auth::fetchSession() {
     m_api->getStatus("sessions", {}, [this](QJsonObject obj, QString err, int status) {
         if (!err.isEmpty()) {
             if (!isApiRejection(status)) { holdOffline(err); return; }
+            // A refused access token is not a refused session while the
+            // refresh token still stands. The stored expiry can say a dead
+            // token is current: one written in local time before a time zone
+            // change did on 2026-09-23. Ask the refresh grant once.
+            if (!m_refreshToken.isEmpty() && !m_sessionRefreshTried) {
+                m_sessionRefreshTried = true;
+                m_refreshTimer->stop();
+                // Known dead now, so a retry after an outage refreshes too.
+                m_tokenExpiry = QDateTime::currentDateTimeUtc();
+                refreshAccessToken();
+                return;
+            }
             endHold();
             emit loginFailed(err);
             setState(State::LoggedOut);
@@ -353,6 +368,7 @@ void Auth::fetchSession() {
         }
         m_retryDelayMs = 0;
         m_retryTimer->stop();
+        m_sessionRefreshTried = false;
         m_userId      = obj["userId"].toVariant().toLongLong();
         m_countryCode = obj["countryCode"].toString();
         m_api->setCountryCode(m_countryCode);
@@ -434,7 +450,10 @@ void Auth::saveCredentials() {
     QJsonObject obj;
     obj["access_token"]  = m_accessToken;
     obj["refresh_token"] = m_refreshToken;
-    obj["expires_at"]    = m_tokenExpiry.toString(Qt::ISODate);
+    // UTC, so a time zone change cannot move it. A file from before this
+    // has no offset and loads as local time; the session check's refresh
+    // fallback covers one that has gone wrong.
+    obj["expires_at"]    = m_tokenExpiry.toUTC().toString(Qt::ISODate);
     obj["user_id"]       = m_userId;
     obj["country_code"]  = m_countryCode;
     obj["username"]      = m_username;
