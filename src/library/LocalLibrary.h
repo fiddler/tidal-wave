@@ -40,7 +40,11 @@ public:
     static const QStringList &supportedSuffixes();
 
     // ─── library ───────────────────────────────────────
-    Q_INVOKABLE QVariantList tracks(const QString &filter = QString()) const;
+    // sort: "artist" (default), "album", "title", "duration", "added".
+    // Every order groups an album together underneath its key, so a split
+    // album never scatters across the list whichever one is chosen.
+    Q_INVOKABLE QVariantList tracks(const QString &filter = QString(),
+                                    const QString &sort = QString()) const;
     Q_INVOKABLE void importUrls(const QList<QUrl> &urls);   // files and/or folders
     Q_INVOKABLE void removeTracks(const QVariantList &localIds);
     Q_INVOKABLE bool hasAudioUrls(const QList<QUrl> &urls) const;
@@ -97,6 +101,9 @@ private:
     // see the implementation for the exact order. Results are cached per
     // directory so a 12-track album scans its folder once, not twelve times.
     QString findFolderCover(const QString &audioPath) const;
+    // Adds album_artist to libraries built before it existed, and fills it in.
+    void migrateAlbumArtist();
+    static QString orderClause(const QString &sort);
     // Locates ffprobe/ffmpeg, PATH first and known install prefixes after.
     void resolveTools();
     QList<qint64> playlistOrder(qint64 playlistId) const;

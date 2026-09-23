@@ -1,3 +1,4 @@
+import QtCore
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
@@ -22,7 +23,25 @@ Rectangle {
     property var tracks: []
     property string filter: ""
 
-    function reload() { root.tracks = library.tracks(root.filter) }
+    // The library has no hand-made order to drag rows into — it is every file
+    // on disk, not a playlist — so the answer to "this ordering is wrong" is a
+    // choice of ordering. Remembered, because it is a preference, not a mode.
+    Settings {
+        id: localPrefs
+        category: "local"
+        property string sortMode: "artist"   // artist | album | title | duration | added
+    }
+
+    readonly property var sortLabels: ({
+        "artist":   "Album artist",
+        "album":    "Album",
+        "title":    "Title",
+        "duration": "Length",
+        "added":    "Recently added"
+    })
+
+    function reload() { root.tracks = library.tracks(root.filter, localPrefs.sortMode) }
+    function setSort(mode) { localPrefs.sortMode = mode; reload() }
 
     Component.onCompleted: reload()
 
@@ -120,6 +139,74 @@ Rectangle {
                         glyph: "list-plus"
                         accent: false
                         onClicked: { newPlaylistField.text = ""; newPlaylistPopup.open() }
+                    }
+                }
+
+                Row {
+                    spacing: 8
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Sort by"
+                        color: Theme.textDim
+                        font.pixelSize: 12
+                    }
+                    Rectangle {
+                        id: sortPill
+                        width: sortLabel.implicitWidth + 30
+                        height: 26
+                        radius: 13
+                        color: sortHov.hovered ? Theme.surfaceHov : Theme.surface
+                        border.color: Theme.border
+                        HoverHandler { id: sortHov }
+                        TapHandler { onTapped: sortMenu.popup(0, sortPill.height) }
+                        Text {
+                            id: sortLabel
+                            anchors.centerIn: parent
+                            anchors.horizontalCenterOffset: -5
+                            text: root.sortLabels[localPrefs.sortMode] || "Album artist"
+                            color: Theme.textSec
+                            font.pixelSize: 12
+                        }
+                        Text {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "▾"
+                            color: Theme.textDim
+                            font.pixelSize: 9
+                        }
+
+                        Menu {
+                            id: sortMenu
+                            background: Rectangle {
+                                implicitWidth: 180
+                                color: "#1E1E1E"
+                                border.color: Theme.border
+                                radius: Theme.radius
+                            }
+                            Repeater {
+                                model: ["artist", "album", "title", "duration", "added"]
+                                MenuItem {
+                                    id: sortItem
+                                    required property string modelData
+                                    text: root.sortLabels[sortItem.modelData]
+                                    onTriggered: root.setSort(sortItem.modelData)
+                                    contentItem: Text {
+                                        text: sortItem.text
+                                        // The active order is tinted rather
+                                        // than check-marked: no indent shift
+                                        // between the five items.
+                                        color: localPrefs.sortMode === sortItem.modelData
+                                               ? Theme.accent : Theme.textPrimary
+                                        leftPadding: 16
+                                        font.pixelSize: 14
+                                    }
+                                    background: Rectangle {
+                                        color: sortItem.highlighted ? Theme.surfaceHov : "transparent"
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

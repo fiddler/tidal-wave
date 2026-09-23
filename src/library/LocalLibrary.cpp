@@ -127,7 +127,7 @@ void LocalLibrary::createSchema() {
         " id INTEGER PRIMARY KEY,"
         " path TEXT NOT NULL UNIQUE,"
         " title TEXT NOT NULL,"
-        " artist TEXT, album TEXT, year TEXT, codec TEXT, cover TEXT,"
+        " artist TEXT, album TEXT, album_artist TEXT, year TEXT, codec TEXT, cover TEXT,"
         " duration INTEGER NOT NULL DEFAULT 0,"
         " track_no INTEGER NOT NULL DEFAULT 0,"
         " disc_no  INTEGER NOT NULL DEFAULT 1,"
@@ -147,6 +147,41 @@ void LocalLibrary::createSchema() {
         " position    INTEGER NOT NULL)"));
     q.exec(QStringLiteral(
         "CREATE INDEX IF NOT EXISTS idx_items_playlist ON playlist_items(playlist_id, position)"));
+
+    migrateAlbumArtist();
+}
+
+// album_artist arrived after the first libraries were built, and it is what
+// keeps a split or compilation album in one block instead of scattering its
+// tracks under each performer's name.
+//
+// Existing rows are filled in from what is already in the table rather than by
+// re-running ffprobe over the whole library: an album whose tracks all name the
+// same artist belongs to that artist, and one that names several is a
+// compilation. That is the case the scattering actually comes from, it costs
+// two statements instead of a process per file, and a later re-import of any
+// file overwrites the guess with the real tag.
+void LocalLibrary::migrateAlbumArtist() {
+    QSqlQuery cols(QStringLiteral("PRAGMA table_info(tracks)"), m_db);
+    bool has = false;
+    while (cols.next())
+        if (cols.value(1).toString() == QLatin1String("album_artist")) { has = true; break; }
+    if (!has) {
+        QSqlQuery add(m_db);
+        if (!add.exec(QStringLiteral("ALTER TABLE tracks ADD COLUMN album_artist TEXT"))) return;
+    }
+
+    QSqlQuery fill(m_db);
+    fill.exec(QStringLiteral(
+        "UPDATE tracks SET album_artist = ("
+        "  SELECT CASE WHEN COUNT(DISTINCT o.artist) > 1 THEN 'Various Artists'"
+        "              ELSE MIN(o.artist) END"
+        "  FROM tracks o WHERE o.album = tracks.album)"
+        " WHERE (album_artist IS NULL OR album_artist = '')"
+        "   AND album IS NOT NULL AND album <> ''"));
+    fill.exec(QStringLiteral(
+        "UPDATE tracks SET album_artist = artist"
+        " WHERE album_artist IS NULL OR album_artist = ''"));
 }
 
 int LocalLibrary::trackCount() const {
@@ -169,6 +204,7 @@ QVariantMap LocalLibrary::rowToMap(const QSqlQuery &q) const {
     m[QStringLiteral("artists")]     = q.value(QStringLiteral("artist")).toString();
     m[QStringLiteral("artistId")]    = 0LL;
     m[QStringLiteral("albumTitle")]  = q.value(QStringLiteral("album")).toString();
+    m[QStringLiteral("albumArtist")] = q.value(QStringLiteral("album_artist")).toString();
     m[QStringLiteral("albumId")]     = 0LL;
     m[QStringLiteral("albumCover")]  = QString();
     m[QStringLiteral("coverUrl")]    = coverUrl;
@@ -184,14 +220,26 @@ QVariantMap LocalLibrary::rowToMap(const QSqlQuery &q) const {
     return m;
 }
 
-QVariantList LocalLibrary::tracks(const QString &filter) const {
+// Every clause ends in album, disc_no, track_no: whatever the list is sorted
+// by, an album still reads in its own running order rather than alphabetically
+// by song title. album_artist leads the default so a split stays in one block.
+QString LocalLibrary::orderClause(const QString &sort) {
+    if (sort == QLatin1String("album"))    return QStringLiteral("album COLLATE NOCASE, disc_no, track_no, title COLLATE NOCASE");
+    if (sort == QLatin1String("title"))    return QStringLiteral("title COLLATE NOCASE, artist COLLATE NOCASE");
+    if (sort == QLatin1String("duration")) return QStringLiteral("duration, title COLLATE NOCASE");
+    if (sort == QLatin1String("added"))    return QStringLiteral("added_at DESC, id DESC");
+    return QStringLiteral("album_artist COLLATE NOCASE, album COLLATE NOCASE, disc_no, track_no, title COLLATE NOCASE");
+}
+
+QVariantList LocalLibrary::tracks(const QString &filter, const QString &sort) const {
+    const QString order = QStringLiteral(" ORDER BY ") + orderClause(sort);
     QSqlQuery q(m_db);
     if (filter.trimmed().isEmpty()) {
-        q.prepare(QStringLiteral("SELECT * FROM tracks ORDER BY artist, album, disc_no, track_no, title"));
+        q.prepare(QStringLiteral("SELECT * FROM tracks") + order);
     } else {
         q.prepare(QStringLiteral(
             "SELECT * FROM tracks WHERE title LIKE :f OR artist LIKE :f OR album LIKE :f"
-            " ORDER BY artist, album, disc_no, track_no, title"));
+            " OR album_artist LIKE :f") + order);
         q.bindValue(QStringLiteral(":f"), QStringLiteral("%%%1%%").arg(filter.trimmed()));
     }
     QVariantList out;
@@ -393,13 +441,19 @@ void LocalLibrary::probeNext() {
 
             QSqlQuery ins(m_db);
             ins.prepare(QStringLiteral(
-                "INSERT INTO tracks (path,title,artist,album,year,codec,duration,track_no,disc_no,added_at)"
-                " VALUES (:path,:title,:artist,:album,:year,:codec,:duration,:track_no,:disc_no,:added)"));
+                "INSERT INTO tracks (path,title,artist,album,album_artist,year,codec,duration,track_no,disc_no,added_at)"
+                " VALUES (:path,:title,:artist,:album,:album_artist,:year,:codec,:duration,:track_no,:disc_no,:added)"));
             ins.bindValue(QStringLiteral(":path"),  path);
             ins.bindValue(QStringLiteral(":title"), title);
             ins.bindValue(QStringLiteral(":artist"),
                           tag(tags, {QStringLiteral("artist"), QStringLiteral("album_artist")}));
             ins.bindValue(QStringLiteral(":album"), tag(tags, {QStringLiteral("album")}));
+            // Falls back to the performer so the column is never empty: the
+            // ordering reads it directly and a null would sort to the top.
+            QString albumArtist = tag(tags, {QStringLiteral("album_artist"),
+                                             QStringLiteral("albumartist")});
+            if (albumArtist.isEmpty()) albumArtist = tag(tags, {QStringLiteral("artist")});
+            ins.bindValue(QStringLiteral(":album_artist"), albumArtist);
             ins.bindValue(QStringLiteral(":year"),
                           tag(tags, {QStringLiteral("date"), QStringLiteral("year")}));
             ins.bindValue(QStringLiteral(":codec"), codec);

@@ -13,6 +13,9 @@
   dropped on a Tidal playlist, or Tidal tracks dropped on a local playlist, tint
   the row red and explain the mismatch; dropping audio files while a Tidal
   playlist is open says the tracks are going to the local library.
+- Local Files can be sorted by album artist, album, title, length or date
+  added. The choice is remembered. Every order still reads an album in its own
+  running order rather than alphabetically by song title.
 
 ### Fixed
 
@@ -25,6 +28,11 @@
 - Local library errors and import results are reported wherever you are. They
   were announced only on the Local Files page, so an import started anywhere
   else — dropping files on a playlist, say — failed in silence.
+- A split or compilation album stays in one block in Local Files. Sorting led
+  with the track artist, so an album whose tracks each name a different
+  performer was scattered across the list. Tracks now carry an album artist,
+  read from the tag on import and filled in for existing libraries from the
+  album's own tracks.
 
 ## 2026-09-07
 
