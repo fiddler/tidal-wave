@@ -698,6 +698,37 @@ ApplicationWindow {
         z: 9001
     }
 
+    // Window-wide notice channel. Pages and drop targets call notify()/warn()
+    // rather than owning a toast each: an import reports its result even after
+    // you have navigated somewhere else, and a drop that cannot be honoured
+    // says so wherever it lands.
+    property alias toast: toast
+    function notify(message) { toast.show(message) }
+    function warn(message)   { toast.warn(message) }
+
+    Toast {
+        id: toast
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 120
+        z: 9002
+    }
+
+    // The local library talks to the window, not to whichever page is open:
+    // an import outlives the page that started it.
+    Connections {
+        target: library
+        function onError(message) { root.warn(message) }
+        function onImportFinished(added, skipped, failed) {
+            var parts = []
+            if (added   > 0) parts.push(added + (added === 1 ? " track added" : " tracks added"))
+            if (skipped > 0) parts.push(skipped + " already in library")
+            if (failed  > 0) parts.push(failed + " could not be read")
+            if (parts.length === 0) root.warn("No supported audio files found")
+            else                    root.notify(parts.join(" • "))
+        }
+    }
+
     // Background playlist writes report here rather than blocking the page.
     SyncIndicator {
         anchors.right: parent.right

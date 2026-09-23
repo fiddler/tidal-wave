@@ -17,6 +17,23 @@
 
 namespace {
 
+// A .app launched from Finder or the Dock inherits a bare PATH —
+// /usr/bin:/bin:/usr/sbin:/sbin — so findExecutable misses every package
+// manager's prefix, and an import that works from a terminal fails from the
+// Dock with "not found". Look in the usual prefixes as well.
+QString findTool(const QString &name) {
+    const QString onPath = QStandardPaths::findExecutable(name);
+    if (!onPath.isEmpty()) return onPath;
+    static const QStringList prefixes{
+        QStringLiteral("/opt/homebrew/bin"),   // Homebrew, Apple silicon
+        QStringLiteral("/usr/local/bin"),      // Homebrew, Intel
+        QStringLiteral("/opt/local/bin"),      // MacPorts
+        QStringLiteral("/usr/bin"),
+        QStringLiteral("/snap/bin"),
+    };
+    return QStandardPaths::findExecutable(name, prefixes);
+}
+
 QString msToClock(int seconds) {
     return QStringLiteral("%1:%2").arg(seconds / 60).arg(seconds % 60, 2, 10, QChar('0'));
 }
@@ -67,8 +84,7 @@ const QStringList &LocalLibrary::supportedSuffixes() {
 }
 
 LocalLibrary::LocalLibrary(QObject *parent) : QObject(parent) {
-    m_ffprobe = QStandardPaths::findExecutable(QStringLiteral("ffprobe"));
-    m_ffmpeg  = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    resolveTools();
     openDatabase();
 }
 
@@ -77,6 +93,13 @@ LocalLibrary::~LocalLibrary() {
         m_probe->disconnect();
         if (m_probe->state() != QProcess::NotRunning) m_probe->kill();
     }
+}
+
+// Re-run before every import, not only at startup: installing ffmpeg is the
+// fix we tell the user to apply, and it should take effect without a restart.
+void LocalLibrary::resolveTools() {
+    if (m_ffprobe.isEmpty()) m_ffprobe = findTool(QStringLiteral("ffprobe"));
+    if (m_ffmpeg.isEmpty())  m_ffmpeg  = findTool(QStringLiteral("ffmpeg"));
 }
 
 void LocalLibrary::openDatabase() {
@@ -278,8 +301,9 @@ void LocalLibrary::importUrls(const QList<QUrl> &urls) {
         emit error(tr("An import is already running."));
         return;
     }
+    resolveTools();
     if (m_ffprobe.isEmpty()) {
-        emit error(tr("ffprobe was not found on PATH — install ffmpeg to import local files."));
+        emit error(tr("ffprobe was not found — run “brew install ffmpeg” to import local files."));
         return;
     }
 

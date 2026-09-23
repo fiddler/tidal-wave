@@ -97,6 +97,8 @@ private:
     // see the implementation for the exact order. Results are cached per
     // directory so a 12-track album scans its folder once, not twelve times.
     QString findFolderCover(const QString &audioPath) const;
+    // Locates ffprobe/ffmpeg, PATH first and known install prefixes after.
+    void resolveTools();
     QList<qint64> playlistOrder(qint64 playlistId) const;
     void writePlaylistOrder(qint64 playlistId, const QList<qint64> &order);
     mutable QHash<QString, QString> m_folderCoverCache;

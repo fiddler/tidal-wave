@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-23
+
+### Fixed
+
+- Importing local files works when the app is launched from Finder or the Dock.
+  ffprobe was looked up once on the inherited PATH, which there holds only
+  /usr/bin:/bin:/usr/sbin:/sbin — so the same import succeeded from a terminal
+  and failed with "not found" from the Dock. Known install prefixes are searched
+  too, and the lookup is repeated before each import, so installing ffmpeg takes
+  effect without a restart.
+- Local library errors and import results are reported wherever you are. They
+  were announced only on the Local Files page, so an import started anywhere
+  else — dropping files on a playlist, say — failed in silence.
+
 ## 2026-09-07
 
 ### Fixed

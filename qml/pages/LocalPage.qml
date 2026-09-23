@@ -29,14 +29,6 @@ Rectangle {
     Connections {
         target: library
         function onTracksChanged() { root.reload() }
-        function onError(message) { toast.show(message) }
-        function onImportFinished(added, skipped, failed) {
-            var parts = []
-            if (added   > 0) parts.push(added + (added === 1 ? " track added" : " tracks added"))
-            if (skipped > 0) parts.push(skipped + " already in library")
-            if (failed  > 0) parts.push(failed + " could not be read")
-            toast.show(parts.length > 0 ? parts.join(" • ") : "No supported audio files found")
-        }
     }
 
     function playFrom(list, i) {
@@ -297,31 +289,4 @@ Rectangle {
         onOpened: newPlaylistField.forceActiveFocus()
     }
 
-    // Small transient message strip, used for import results and errors.
-    Rectangle {
-        id: toast
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 24
-        visible: opacity > 0
-        opacity: 0
-        radius: 8
-        color: Theme.surfaceHigh
-        border.color: Theme.border
-        width: toastText.implicitWidth + 32
-        height: 40
-
-        property string message: ""
-        function show(m) { message = m; opacity = 1; toastTimer.restart() }
-
-        Text {
-            id: toastText
-            anchors.centerIn: parent
-            text: toast.message
-            color: Theme.textPrimary
-            font.pixelSize: 13
-        }
-        Timer { id: toastTimer; interval: 4000; onTriggered: toast.opacity = 0 }
-        Behavior on opacity { NumberAnimation { duration: 200 } }
-    }
 }
