@@ -23,7 +23,8 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 >   next to the file (`album.cue`, `album.flac.cue`), dropped on its own, or
 >   embedded in the FLAC's tags; FLAC chapter lists work too. Tracks play a
 >   slice of the file through mpv, so nothing is split or re-encoded on disk.
->   An album imported whole before is split when you import it again
+>   An album imported whole before is split when you import it again with
+>   its `.cue` beside it, and tracks removed from the library come back
 > - **PKCE login** — unlocks LOSSLESS and HI_RES_LOSSLESS streaming
 > - **mpv audio engine** — replaces QMediaPlayer; gapless-quality local and
 >   DASH playback, plus lossless casting fixes

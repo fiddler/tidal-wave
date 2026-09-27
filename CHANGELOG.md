@@ -10,7 +10,8 @@
   track plays its slice of the file, nothing is split on disk. Dropping the
   .cue alone imports the audio it describes, even when the sheet still names
   the .wav it was ripped to. An album already imported whole is split when
-  imported again.
+  imported again with its .cue beside it; importing a CUE album again also
+  restores tracks removed from the library.
 - Local tracks can be removed from the library: right-click "Remove from
   library", or ⌫ / Delete on a focused row. A multi-selection goes at once.
   Only the library entry is removed, never the file.

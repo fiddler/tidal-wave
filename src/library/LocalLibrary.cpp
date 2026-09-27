@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -130,7 +131,7 @@ void LocalLibrary::createSchema() {
     q.exec(QStringLiteral(
         "CREATE TABLE IF NOT EXISTS tracks ("
         " id INTEGER PRIMARY KEY,"
-        " path TEXT NOT NULL UNIQUE,"
+        " path TEXT NOT NULL,"
         " title TEXT NOT NULL,"
         " artist TEXT, album TEXT, album_artist TEXT, year TEXT, codec TEXT, cover TEXT,"
         " duration INTEGER NOT NULL DEFAULT 0,"
@@ -198,15 +199,31 @@ void LocalLibrary::migrateAlbumArtist() {
 // place, so the table is rebuilt: foreign keys go off first, or dropping the
 // old table would cascade into every playlist.
 void LocalLibrary::migrateSlices() {
-    QSqlQuery cols(QStringLiteral("PRAGMA table_info(tracks)"), m_db);
-    while (cols.next())
-        if (cols.value(1).toString() == QLatin1String("start_ms")) return;
+    // The first build with slices created fresh tables that still said
+    // "path TEXT NOT NULL UNIQUE", so the column alone is not proof.
+    QSqlQuery ddl(QStringLiteral("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tracks'"), m_db);
+    if (ddl.next()) {
+        const QString sql = ddl.value(0).toString();
+        // An open statement on sqlite_master makes the DROP below fail with
+        // "table is locked".
+        ddl.finish();
+        if (sql.contains(QLatin1String("start_ms"))
+            && !sql.contains(QLatin1String("path TEXT NOT NULL UNIQUE"), Qt::CaseInsensitive))
+            return;
+    }
 
     QSqlQuery q(m_db);
     q.exec(QStringLiteral("PRAGMA foreign_keys = OFF"));
     m_db.transaction();
-    const QString columns = QStringLiteral(
+    QString columns = QStringLiteral(
         "id,path,title,artist,album,album_artist,year,codec,cover,duration,track_no,disc_no,added_at");
+    QSqlQuery cols(QStringLiteral("PRAGMA table_info(tracks)"), m_db);
+    while (cols.next())
+        if (cols.value(1).toString() == QLatin1String("start_ms")) {
+            columns += QStringLiteral(",start_ms,end_ms");
+            break;
+        }
+    cols.finish();
     const bool ok =
         q.exec(QStringLiteral(
             "CREATE TABLE tracks_new ("
@@ -454,14 +471,15 @@ void LocalLibrary::probeNext() {
     const QString path = m_pending.takeFirst();
 
     // Already imported — nothing to do. Cheaper than probing then failing on
-    // the UNIQUE constraint. The one exception is an album imported whole
-    // before its CUE sheet was read: importing it again splits it.
+    // the UNIQUE constraint. Two exceptions: an album imported whole before
+    // its CUE sheet was read is split, and a CUE album missing tracks the
+    // user removed gets them back.
     QSqlQuery dup(m_db);
     dup.prepare(QStringLiteral("SELECT COUNT(*), MAX(start_ms), MAX(end_ms) FROM tracks WHERE path = :p"));
     dup.bindValue(QStringLiteral(":p"), path);
     const bool imported = dup.exec() && dup.next() && dup.value(0).toInt() > 0;
     const bool whole = imported && dup.value(1).toLongLong() == 0 && dup.value(2).toLongLong() == 0;
-    if (imported && !(whole && cueTracksFor(path).size() >= 2)) {
+    if (imported && whole && cueTracksFor(path).size() < 2) {
         ++m_skipped;
         emit importProgress(m_pendingTotal - m_pending.size(), m_pendingTotal);
         QMetaObject::invokeMethod(this, &LocalLibrary::probeNext, Qt::QueuedConnection);
@@ -516,14 +534,26 @@ void LocalLibrary::probeNext() {
             // Replaces a whole-album row imported before its sheet was read.
             // Its playlist entries go with it; there is no one track to
             // hand them to.
-            QSqlQuery drop(m_db);
-            drop.prepare(QStringLiteral("DELETE FROM tracks WHERE path = :p AND start_ms = 0 AND end_ms = 0"));
-            drop.bindValue(QStringLiteral(":p"), path);
-            if (split) drop.exec();
+            bool dropped = false;
+            if (split) {
+                QSqlQuery drop(m_db);
+                drop.prepare(QStringLiteral("DELETE FROM tracks WHERE path = :p AND start_ms = 0 AND end_ms = 0"));
+                drop.bindValue(QStringLiteral(":p"), path);
+                dropped = drop.exec() && drop.numRowsAffected() > 0;
+            }
+            // Tracks of this file still in the library keep their rows, and
+            // with them their playlist entries.
+            QSet<qint64> present;
+            QSqlQuery have(m_db);
+            have.prepare(QStringLiteral("SELECT start_ms FROM tracks WHERE path = :p"));
+            have.bindValue(QStringLiteral(":p"), path);
+            if (have.exec()) while (have.next()) present.insert(have.value(0).toLongLong());
+            if (!split && !present.isEmpty()) slices.clear();   // a whole file already there
 
             QList<qint64> rowIds;
             bool ok = true;
             for (const Slice &sl : std::as_const(slices)) {
+                if (present.contains(sl.startMs)) continue;
                 QString title = sl.title.isEmpty() ? tag(tags, {QStringLiteral("title")}) : sl.title;
                 if (title.isEmpty()) title = split ? tr("Track %1").arg(sl.number)
                                                    : fi.completeBaseName();   // untagged file
@@ -563,8 +593,12 @@ void LocalLibrary::probeNext() {
                 rowIds << ins.lastInsertId().toLongLong();
             }
 
-            if (ok) {
+            if (ok && rowIds.isEmpty()) {
                 m_db.commit();
+                ++m_skipped;
+            } else if (ok) {
+                m_db.commit();
+                if (dropped) { renumberPlaylists(); emit playlistsChanged(); }
                 m_added += rowIds.size();
                 // Embedded art wins: it is per-track, so it stays correct on
                 // compilations where one folder image would not be. The
@@ -872,8 +906,15 @@ void LocalLibrary::removeTracks(const QVariantList &localIds) {
         }
     }
     m_db.commit();
-    // The cascade leaves gaps in the position sequence of any playlist that
-    // held a deleted track, so renumber every playlist.
+    renumberPlaylists();
+    emit tracksChanged();
+    emit playlistsChanged();
+}
+
+// The cascade from a deleted track leaves gaps in the position sequence of any
+// playlist that held it, and positions are what the pages pass back when
+// removing or moving an item, so renumber every playlist.
+void LocalLibrary::renumberPlaylists() {
     QSqlQuery pl(QStringLiteral("SELECT id FROM playlists"), m_db);
     QList<qint64> ids;
     while (pl.next()) ids << pl.value(0).toLongLong();
@@ -892,8 +933,6 @@ void LocalLibrary::removeTracks(const QVariantList &localIds) {
             up.exec();
         }
     }
-    emit tracksChanged();
-    emit playlistsChanged();
 }
 
 // ─── playlists ─────────────────────────────────────────

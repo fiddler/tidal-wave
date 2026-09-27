@@ -109,6 +109,7 @@ private:
     void migrateAlbumArtist();
     // Adds start_ms/end_ms and relaxes UNIQUE(path) to UNIQUE(path, start_ms).
     void migrateSlices();
+    void renumberPlaylists();
 
     // One track of a file that holds a whole album. endMs 0 = end of file.
     struct Slice {
