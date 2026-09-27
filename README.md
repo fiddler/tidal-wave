@@ -16,7 +16,14 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 > - **Offline playlists** — pin a playlist for offline playback, synced at
 >   listening speed with size/time estimates, resumable, with cached cover art
 > - **Local music library** — import files/folders, local-only playlists,
->   folder cover art, drag & drop between local and Tidal content
+>   folder cover art, drag & drop between local and Tidal content, remove
+>   tracks from the library (right-click or ⌫; files on disk are untouched)
+> - **CUE sheet albums** — an album ripped to one FLAC imports as its separate
+>   tracks, each with its own title, artist and length. The sheet is found
+>   next to the file (`album.cue`, `album.flac.cue`), dropped on its own, or
+>   embedded in the FLAC's tags; FLAC chapter lists work too. Tracks play a
+>   slice of the file through mpv, so nothing is split or re-encoded on disk.
+>   An album imported whole before is split when you import it again
 > - **PKCE login** — unlocks LOSSLESS and HI_RES_LOSSLESS streaming
 > - **mpv audio engine** — replaces QMediaPlayer; gapless-quality local and
 >   DASH playback, plus lossless casting fixes

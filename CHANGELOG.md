@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-09-27
+
+### Added
+
+- Albums ripped to one file with a CUE sheet import as separate tracks. The
+  sheet is found beside the file (album.cue or album.flac.cue), dropped with
+  it, or embedded in the FLAC's tags; a FLAC's chapter list works too. Each
+  track plays its slice of the file, nothing is split on disk. Dropping the
+  .cue alone imports the audio it describes, even when the sheet still names
+  the .wav it was ripped to. An album already imported whole is split when
+  imported again.
+- Local tracks can be removed from the library: right-click "Remove from
+  library", or ⌫ / Delete on a focused row. A multi-selection goes at once.
+  Only the library entry is removed, never the file.
+
+### Fixed
+
+- Removing a local track no longer deletes the folder's cover image. The
+  cover column pointed at the user's own cover.jpg, and removal deleted it.
+- A local track's right-click menu no longer ends in two stray dividers. They
+  belonged to Tidal-only items that were already hidden.
+
 ## 2026-09-23
 
 ### Added
