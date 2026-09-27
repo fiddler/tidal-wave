@@ -525,7 +525,9 @@ void Player::loadAndPlay(int index, qint64 startMs) {
         // onMediaStatusChanged/onPlaybackStateChanged. Clearing it here would
         // leave the row with neither the loading nor the playing state during
         // the gap between setSource() and the first audio.
-        m_player->setSource(QUrl::fromLocalFile(m_currentTrack.localPath));
+        m_player->setSource(QUrl::fromLocalFile(m_currentTrack.localPath),
+                            m_queue[index].value("localStartMs").toLongLong(),
+                            m_queue[index].value("localEndMs").toLongLong());
         m_player->play();
         return;
     }

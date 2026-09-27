@@ -7,6 +7,10 @@
 #include <QStringList>
 #include <QUrl>
 
+#include "CueSheet.h"
+
+class QJsonArray;
+class QJsonObject;
 class QProcess;
 class QSqlQuery;
 
@@ -103,6 +107,21 @@ private:
     QString findFolderCover(const QString &audioPath) const;
     // Adds album_artist to libraries built before it existed, and fills it in.
     void migrateAlbumArtist();
+    // Adds start_ms/end_ms and relaxes UNIQUE(path) to UNIQUE(path, start_ms).
+    void migrateSlices();
+
+    // One track of a file that holds a whole album. endMs 0 = end of file.
+    struct Slice {
+        int     number = 0;
+        QString title, performer, album, albumArtist, year;
+        int     disc = 0;
+        qint64  startMs = 0, endMs = 0;
+    };
+    QString findCue(const QString &audioPath) const;
+    QList<CueSheet::Track> cueTracksFor(const QString &audioPath) const;
+    QStringList audioFilesFor(const QString &cuePath) const;
+    QList<Slice> slicesFor(const QString &path, const QJsonObject &tags,
+                           const QJsonArray &chapters, qint64 fileMs) const;
     static QString orderClause(const QString &sort);
     // Locates ffprobe/ffmpeg, PATH first and known install prefixes after.
     void resolveTools();
@@ -116,6 +135,8 @@ private:
     QString      m_ffmpeg;
 
     QStringList m_pending;
+    // Audio file -> the .cue the user dropped for it, for this import only.
+    QHash<QString, QString> m_cueFor;
     int         m_pendingTotal = 0;
     int         m_added = 0, m_skipped = 0, m_failed = 0;
     bool        m_importing = false;

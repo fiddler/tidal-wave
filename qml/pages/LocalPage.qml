@@ -318,7 +318,7 @@ Rectangle {
         id: importDialog
         title: "Add audio files"
         fileMode: FileDialog.OpenFiles
-        nameFilters: ["Audio files (*.flac *.mp3 *.m4a *.aac *.ogg *.opus *.wav *.aiff *.aif *.alac *.wma *.mp4)",
+        nameFilters: ["Audio files (*.flac *.mp3 *.m4a *.aac *.ogg *.opus *.wav *.aiff *.aif *.alac *.wma *.mp4 *.cue)",
                       "All files (*)"]
         onAccepted: library.importUrls(selectedFiles)
     }

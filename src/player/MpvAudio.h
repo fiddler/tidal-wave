@@ -36,7 +36,10 @@ public:
     // True when libmpv started. Everything below is a safe no-op when false.
     bool isValid() const { return m_mpv != nullptr; }
 
-    void setSource(const QUrl &url);
+    // A non-zero range plays only that part of a local file, as one track of
+    // a CUE-sheet album. endMs 0 = to the end. Position, duration and seeks
+    // are then relative to startMs, so callers need not know about the range.
+    void setSource(const QUrl &url, qint64 startMs = 0, qint64 endMs = 0);
     void play();
     void pause();
     void stop();

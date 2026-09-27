@@ -263,7 +263,7 @@ bool MpvAudio::reloadAudioOutput(const QString &reason) {
     return rc >= 0;
 }
 
-void MpvAudio::setSource(const QUrl &url) {
+void MpvAudio::setSource(const QUrl &url, qint64 startMs, qint64 endMs) {
     if (!m_mpv) return;
     if (url.isEmpty()) {
         m_sourceScheme.clear();
@@ -298,8 +298,17 @@ void MpvAudio::setSource(const QUrl &url) {
         {QStringLiteral("scheme"), m_sourceScheme},
         {QStringLiteral("local"), url.isLocalFile()}
     });
-    const QByteArray path = url.isLocalFile() ? url.toLocalFile().toUtf8()
-                                              : url.toString().toUtf8();
+    QByteArray path = url.isLocalFile() ? url.toLocalFile().toUtf8()
+                                        : url.toString().toUtf8();
+    // An EDL timeline of one segment. %n% prefixes the name with its length
+    // in bytes, so commas and semicolons in a path need no escaping.
+    if (url.isLocalFile() && (startMs > 0 || endMs > 0)) {
+        QByteArray edl = "edl://%" + QByteArray::number(path.size()) + '%' + path
+                       + ',' + QByteArray::number(startMs / 1000.0, 'f', 3);
+        if (endMs > startMs)
+            edl += ',' + QByteArray::number((endMs - startMs) / 1000.0, 'f', 3);
+        path = edl;
+    }
     const char *cmd[] = {"loadfile", path.constData(), nullptr};
     const int rc = mpv_command_async(m_mpv, 0, cmd);
     if (rc < 0) {

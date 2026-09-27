@@ -53,6 +53,7 @@ set(SOURCES
     src/player/DashFetcher.cpp
     src/player/DashStream.cpp
     src/player/Downloader.cpp
+    src/library/CueSheet.cpp
     src/library/LocalLibrary.cpp
     src/library/OfflineManager.cpp
     src/mpris/MprisPlayer.cpp
@@ -73,6 +74,7 @@ set(HEADERS
     src/player/DashFetcher.h
     src/player/DashStream.h
     src/player/Downloader.h
+    src/library/CueSheet.h
     src/library/LocalLibrary.h
     src/library/OfflineManager.h
     src/mpris/MprisPlayer.h
