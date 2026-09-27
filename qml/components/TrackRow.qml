@@ -152,6 +152,8 @@ Item {
     signal playRequested()
     signal menuRequested(real x, real y)
     signal removeFromPlaylistRequested(int itemIndex)
+    // Set by the Local Files page, the one place a row can leave the library.
+    property bool canRemoveFromLibrary: false
 
     activeFocusOnTab: true
     Keys.onReturnPressed: { if (!root.isUnavailable) root.playRequested() }
@@ -161,7 +163,23 @@ Item {
             root.menuRequested(width / 2, height / 2)
             contextMenu.popup()
             event.accepted = true
+        } else if ((event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace)
+                   && root.canRemoveFromLibrary) {
+            root.removeFromLibrary()
+            event.accepted = true
         }
+    }
+
+    // Acts on the whole selection when this row is part of it. Only the
+    // library entry goes; the file on disk is never touched.
+    function removeFromLibrary() {
+        if (!root.trackData || !root.isLocalTrack) return
+        var picked = (root.selection && root.selected && root.selection.count > 1)
+                     ? root.selection.selectedTracks() : [root.trackData]
+        var ids = []
+        for (var i = 0; i < picked.length; i++) if (picked[i].localId) ids.push(picked[i].localId)
+        if (root.selection) root.selection.clear()
+        library.removeTracks(ids)
     }
 
     Rectangle {
@@ -571,6 +589,15 @@ Item {
                     && (root.playlistUuid.length > 0 || root.localPlaylistId > 0))
                     root.removeFromPlaylistRequested(root.trackItemIndex)
             }
+        }
+        MenuItem {
+            text: (root.selection && root.selected && root.selection.count > 1)
+                  ? "🗑  Remove " + root.selection.count + " from library" : "🗑  Remove from library"
+            visible: root.canRemoveFromLibrary && root.isLocalTrack
+            height: visible ? implicitHeight : 0
+            contentItem: Text { text: parent.text; color: Theme.red; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
+            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
+            onTriggered: root.removeFromLibrary()
         }
         MenuItem {
             text: "📻  Start radio"
