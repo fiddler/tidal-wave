@@ -630,7 +630,7 @@ Item {
                 }
             }
         }
-        MenuSeparator {}
+        MenuSeparator { visible: !root.isLocalTrack; height: visible ? implicitHeight : 0 }
         MenuItem {
             text: "💿  Go to album"
             visible: !root.isLocalTrack
@@ -655,7 +655,7 @@ Item {
                     Window.window.navigate("artist", { artistId: root.trackData.artistId })
             }
         }
-        MenuSeparator {}
+        MenuSeparator { visible: !root.isLocalTrack; height: visible ? implicitHeight : 0 }
         MenuItem {
             text: "🔗  Copy link"
             visible: !root.isLocalTrack
