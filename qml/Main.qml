@@ -217,7 +217,8 @@ ApplicationWindow {
         var p = params || {}
         if (!isBack)
             navHistory = NavStack.forward(navHistory,
-                                          { page: currentPage, params: _currentNavParams },
+                                          { page: currentPage, params: _currentNavParams,
+                                            scroll: pageScroll() },
                                           { page: page, params: p },
                                           detailPages, navHistoryMax)
         _currentNavParams = p
@@ -306,11 +307,23 @@ ApplicationWindow {
         return null
     }
 
+    // How far the showing page is scrolled, for pages that report it. A detail
+    // page is rebuilt on the way back, so the history entry carries this and
+    // detailLoader hands it to the new page.
+    function pageScroll() {
+        var l = getLoader(currentPage)
+        var item = l && l.status === Loader.Ready ? l.item : null
+        return item && typeof item.scrollOffset === "function" ? item.scrollOffset() : undefined
+    }
+    property var _pendingScroll: undefined
+
     function goBack() {
         if (navHistory.length === 0) { navigate("home", {}, true); return }
         var top = navHistory[navHistory.length - 1]
         navHistory = navHistory.slice(0, -1)
+        _pendingScroll = top.scroll
         navigate(top.page, top.params, true)
+        _pendingScroll = undefined
     }
 
     // A refused like, save or follow leaves the screen exactly as it was,
@@ -398,6 +411,14 @@ ApplicationWindow {
         return true
     }
 
+    // True while a popup holds the keyboard. Application shortcuts are matched
+    // before a popup sees the key, so the destructive ones check this.
+    function focusInPopup(f) {
+        var overlay = Overlay.overlay
+        for (var p = f; p; p = p.parent) if (p === overlay) return true
+        return false
+    }
+
     Item {
         id: focusStealer
         focus: true
@@ -475,6 +496,17 @@ ApplicationWindow {
                 else if (root.queueOpen) root.queueOpen = false
                 else if (root.detailPages.indexOf(root.currentPage) !== -1) root.goBack()
             }
+        }
+        // Remove the selected tracks from the playlist on screen. The page says
+        // whether it can (canRemoveSelection); elsewhere the key is left alone.
+        Shortcut {
+            sequences: ["Backspace", "Delete"]
+            context: Qt.ApplicationShortcut
+            enabled: auth.state === 2 && !root.isTypingContext(root.activeFocusItem)
+                     && !root.focusInPopup(root.activeFocusItem)
+                     && detailLoader.visible && detailLoader.item !== null
+                     && detailLoader.item.canRemoveSelection === true
+            onActivated: detailLoader.item.removeSelection()
         }
         Shortcut {
             sequence: "Alt+Left"
@@ -579,6 +611,11 @@ ApplicationWindow {
                             }
                         }
                         onLoaded: {
+                            // Before the params: they start the load that
+                            // the scroll position is applied to.
+                            if (item && root._pendingScroll !== undefined
+                                && item.pendingScroll !== undefined)
+                                item.pendingScroll = root._pendingScroll
                             if (item && root.pageParams) {
                                 var params = root.pageParams
                                 root.pageParams = {}

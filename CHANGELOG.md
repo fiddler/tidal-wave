@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-17
+
+### Added
+
+- Backspace or Delete removes the selected tracks from a playlist, Tidal or
+  local. More than one track asks first.
+
+### Fixed
+
+- "Remove from playlist" on a selected row removes the whole selection, not
+  only the row under the cursor.
+- Back returns a playlist to where it was scrolled instead of the top.
+- Refreshing an offline playlist no longer jumps the list to the top.
+
 ## 2026-10-13
 
 Most of this release follows upstream

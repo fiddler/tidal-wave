@@ -146,6 +146,7 @@ qt_add_qml_module(tidal-wave
         qml/components/ArtistLinks.qml
         qml/components/IconMenuItem.qml
         qml/components/CreditsDialog.qml
+        qml/components/RemoveTracksDialog.qml
         qml/components/TrackSelection.qml
         qml/components/DragScrollEdge.qml
         qml/components/ReorderDropArea.qml

@@ -579,7 +579,9 @@ Item {
             }
         }
         IconMenuItem {
-            text: "Remove from playlist"
+            // The page removes the whole selection when this row is part of it.
+            text: (root.selection && root.selected && root.selection.count > 1)
+                  ? "Remove " + root.selection.count + " from playlist" : "Remove from playlist"
             iconName: "trash"
             textColor: Theme.red
             visible: root.playlistUuid.length > 0 || root.localPlaylistId > 0

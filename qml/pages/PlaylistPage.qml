@@ -97,6 +97,59 @@ Rectangle {
         tracksList.contentY = Math.max(min, Math.min(y, max))
     }
 
+    // Distance scrolled from the top of the page. The window stores it in the
+    // back history when leaving, and hands it back as `pendingScroll` on the
+    // page it builds for the return. Applied once the tracks are in.
+    function scrollOffset() { return tracksList.contentY - tracksList.originY }
+    property var pendingScroll: null
+
+    // ── removing tracks ────────────────────────────────
+    function selectedIndices() {
+        var out = []
+        for (var i = 0; i < tracks.length; i++)
+            if (trackSel.isSelected(tracks[i].id)) out.push(i)
+        return out
+    }
+
+    // Backspace and Delete, by way of the window's shortcut.
+    readonly property bool canRemoveSelection: isUserPlaylist && trackSel.hasSelection
+    function removeSelection() { requestRemove(selectedIndices()) }
+
+    function requestRemove(indices) {
+        if (!isUserPlaylist || indices.length === 0) return
+        if (indices.length > 1) removeDialog.ask(indices)
+        else                    removeIndices(indices)
+    }
+
+    // Tidal removes one row per request here, each behind an ETag fetch. The
+    // rows leave the list at once and the requests run behind it, highest
+    // index first so no removal shifts a row still waiting its turn.
+    function removeIndices(indices) {
+        var desc = indices.slice().sort(function(a, b) { return b - a })
+        var arr = root.tracks.slice()
+        for (var i = 0; i < desc.length; i++) arr.splice(desc[i], 1)
+        var y = tracksList.contentY
+        root.tracks = arr
+        root.restoreScroll(y)
+        trackSel.clear()
+
+        // The run has to finish even if the page is left meanwhile, so it
+        // holds everything it needs and touches the page only to resync.
+        var api = bridge, sync = SyncState
+        var uuid = root.playlistUuid, title = root.playlistTitle, page = root
+        sync.begin(desc.length > 1 ? "Removing " + desc.length + " songs…" : "Removing song…")
+        var step = function(k) {
+            if (k >= desc.length) { sync.end(); return }
+            api.removeTrackFromPlaylist(uuid, desc[k], function(ok) {
+                if (ok) { step(k + 1); return }
+                sync.fail("Tidal refused to remove " + (desc.length - k) + " of " + desc.length
+                          + " songs from “" + title + "”.")
+                try { page.silentReload() } catch (e) {}
+            })
+        }
+        step(0)
+    }
+
     // Refetch without raising the loading overlay — used to resync after a
     // failed write, where the server is the only trustworthy source.
     function silentReload() {
@@ -178,13 +231,23 @@ Rectangle {
         loadError = ""
         tracks = offline.cachedTracks(uuid)
         trackSel.clear()
+        if (pendingScroll !== null) restoreScroll(tracksList.originY + pendingScroll)
         loading = tracks.length === 0
         loadDeadline.restart()
         bridge.fetchPlaylistTracks(uuid, function(t, err) {
             if (generation !== root._loadGeneration) return
             loadDeadline.stop()
             root.loading = false
-            if (!err) { root.tracks = t; return }
+            if (!err) {
+                // A saved copy may already be on screen and scrolled; the
+                // fresh list must not throw it back to the top.
+                var offset = root.pendingScroll !== null ? root.pendingScroll
+                           : root.tracks.length > 0      ? root.scrollOffset() : null
+                root.pendingScroll = null
+                root.tracks = t
+                if (offset !== null) root.restoreScroll(tracksList.originY + offset)
+                return
+            }
             root.loadError = root.tracks.length > 0
                     ? "Couldn't refresh this playlist. Showing the saved copy."
                     : "Couldn't load this playlist. Check your connection and try again."
@@ -193,6 +256,7 @@ Rectangle {
 
     ListView {
         id: tracksList
+        objectName: "playlistTracks"
         anchors.fill: parent
         clip: true
         model: root.tracks
@@ -405,15 +469,8 @@ Rectangle {
                 root.playFrom(root.tracks, index)
             }
             onRemoveFromPlaylistRequested: function(itemIndex) {
-                bridge.removeTrackFromPlaylist(root.playlistUuid, itemIndex, function(ok) {
-                    if (ok) {
-                        var arr = root.tracks.slice()
-                        arr.splice(itemIndex, 1)
-                        var y = tracksList.contentY
-                        root.tracks = arr
-                        root.restoreScroll(y)
-                    }
-                })
+                var whole = trackSel.count > 1 && trackSel.isSelected(modelData.id)
+                root.requestRemove(whole ? root.selectedIndices() : [itemIndex])
             }
         }
 
@@ -471,6 +528,12 @@ Rectangle {
                 onClicked: root.loadPlaylist()
             }
         }
+    }
+
+    RemoveTracksDialog {
+        id: removeDialog
+        objectName: "removeTracksDialog"
+        onConfirmed: (indices) => root.removeIndices(indices)
     }
 
     // Edit playlist popup

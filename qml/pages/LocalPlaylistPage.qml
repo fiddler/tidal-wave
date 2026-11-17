@@ -46,7 +46,41 @@ Rectangle {
         root.tracks = library.playlistTracks(localPlaylistId)
         var min = tracksList.originY
         var max = min + tracksList.contentHeight - tracksList.height
-        if (max > min) tracksList.contentY = Math.max(min, Math.min(y, max))
+        if (max <= min) return
+        if (pendingScroll !== null) { y = min + pendingScroll; pendingScroll = null }
+        tracksList.contentY = Math.max(min, Math.min(y, max))
+    }
+
+    // Distance scrolled from the top of the page. The window stores it in the
+    // back history when leaving, and hands it back as `pendingScroll` on the
+    // page it builds for the return.
+    function scrollOffset() { return tracksList.contentY - tracksList.originY }
+    property var pendingScroll: null
+
+    // ── removing tracks ────────────────────────────────
+    function selectedIndices() {
+        var out = []
+        for (var i = 0; i < tracks.length; i++)
+            if (trackSel.isSelected(tracks[i].id)) out.push(i)
+        return out
+    }
+
+    // Backspace and Delete, by way of the window's shortcut.
+    readonly property bool canRemoveSelection: trackSel.hasSelection
+    function removeSelection() { requestRemove(selectedIndices()) }
+
+    function requestRemove(indices) {
+        if (indices.length === 0) return
+        if (indices.length > 1) removeDialog.ask(indices)
+        else                    removeIndices(indices)
+    }
+
+    // Highest position first, so no removal shifts a row still to go.
+    function removeIndices(indices) {
+        var desc = indices.slice().sort(function(a, b) { return b - a })
+        var id = root.localPlaylistId
+        trackSel.clear()
+        for (var i = 0; i < desc.length; i++) library.removeFromPlaylist(id, desc[i])
     }
 
     function playFrom(list, i) {
@@ -204,7 +238,8 @@ Rectangle {
             trackItemIndex:  index
             onPlayRequested: root.playFrom(root.tracks, index)
             onRemoveFromPlaylistRequested: function(itemIndex) {
-                library.removeFromPlaylist(root.localPlaylistId, itemIndex)
+                var whole = trackSel.count > 1 && trackSel.isSelected(modelData.id)
+                root.requestRemove(whole ? root.selectedIndices() : [itemIndex])
             }
         }
 
@@ -237,6 +272,11 @@ Rectangle {
         anchors { top: parent.top; left: parent.left; right: parent.right }
         height: 52; color: "transparent"
         BackButton { anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 8 } }
+    }
+
+    RemoveTracksDialog {
+        id: removeDialog
+        onConfirmed: (indices) => root.removeIndices(indices)
     }
 
     Popup {

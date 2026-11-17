@@ -38,6 +38,12 @@ bundle is no better: macdeployqt skips `Contents/Resources/qml` when it already 
 dangling symlinks into a deleted `Contents/PlugIns` and a `module "QtQuick.Controls" plugin not
 found` failure. One cure for both: `rm -rf "build/Tidal Wave.app"`, then `make`, then `deploy`.
 
+**A Homebrew upgrade can break configure without stopping the build.** `build/CMakeCache.txt`
+pins mpv's pkg-config include paths by Cellar version. After harfbuzz moved (2026-11-17) `make`
+printed `CMake Error ... PkgConfig::MPV includes non-existent path`, and `cmake --build` then
+compiled from the old Makefiles: a newly added QML file was silently left out of the binary. Cure:
+`cmake -U "MPV*" -U "pkgcfg*" -S . -B build`. After adding a file, grep the build output for it.
+
 Install with `cmake --build build --target deploy` (macdeployqt plus dylibbundler, takes minutes,
 verifies self-containment), then replace `~/Applications/Tidal Wave.app` with the build bundle.
 Never deploy while the app is running from the build bundle.

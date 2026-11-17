@@ -29,6 +29,7 @@ function forward(history, current, target, detailPages, max) {
         return history
 
     var h = history.slice()
-    h.push({ page: current.page, params: current.params })
+    // `scroll` is where the page being left was scrolled to, for the way back.
+    h.push({ page: current.page, params: current.params, scroll: current.scroll })
     return h.length > max ? h.slice(h.length - max) : h
 }
