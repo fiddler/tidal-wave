@@ -293,6 +293,12 @@ Rectangle {
             bottomMargin: 8
             model: ListModel { id: playlistModel }
 
+            // A playlist that changes place travels there, and the rows it
+            // passes make way. No add transition: the first load is hundreds
+            // of insertions.
+            move:      Transition { NumberAnimation { properties: "y"; duration: Theme.dur(220); easing.type: Easing.OutCubic } }
+            displaced: Transition { NumberAnimation { properties: "y"; duration: Theme.dur(220); easing.type: Easing.OutCubic } }
+
             // Shared by the row drop targets and the edge sensors above.
             // A track drag carries its tracks; an album drag carries only an
             // id, so the album is read here, on drop, rather than on every
@@ -779,33 +785,32 @@ Rectangle {
         else if (plPrefs.sortMode === "created")
             list.sort(function(a, b) { return (b.created || "").localeCompare(a.created || "") })
 
-        // A track dropped on a playlist re-runs this only to move one row's
-        // track count. Clearing the model there would send the sidebar back to
-        // the top and rebuild every delegate, so when the rows are the same
-        // playlists in the same order, write the fields in place instead.
-        var sameRows = playlistModel.count === list.length
-        for (var j = 0; sameRows && j < list.length; j++)
-            if (playlistModel.get(j).uuid !== list[j].uuid) sameRows = false
+        syncPlaylistModel(list)
+    }
 
-        if (sameRows) {
-            for (var k = 0; k < list.length; k++) {
-                playlistModel.setProperty(k, "title", list[k].title)
-                playlistModel.setProperty(k, "coverUrl", list[k].coverUrl || "")
-                playlistModel.setProperty(k, "type", list[k].type || "")
-                playlistModel.setProperty(k, "numTracks", list[k].numTracks || 0)
-            }
-            return
-        }
+    // Brings the model to `list` by removing, moving and inserting rows rather
+    // than clearing it. A cleared model sends the sidebar back to the top and
+    // rebuilds every delegate, and a row can only animate to a new place if
+    // the model is told it moved.
+    function syncPlaylistModel(list) {
+        var want = {}
+        for (var w = 0; w < list.length; w++) want[list[w].uuid] = true
+        for (var r = playlistModel.count - 1; r >= 0; r--)
+            if (!want[playlistModel.get(r).uuid]) playlistModel.remove(r)
 
-        playlistModel.clear()
         for (var i = 0; i < list.length; i++) {
-            playlistModel.append({
-                title:   list[i].title,
-                uuid:    list[i].uuid,
-                coverUrl: list[i].coverUrl || "",
-                type:    list[i].type || "",
-                numTracks: list[i].numTracks || 0
-            })
+            var row = { title: list[i].title, uuid: list[i].uuid,
+                        coverUrl: list[i].coverUrl || "", type: list[i].type || "",
+                        numTracks: list[i].numTracks || 0 }
+            if (i < playlistModel.count && playlistModel.get(i).uuid === row.uuid) {
+                playlistModel.set(i, row)
+                continue
+            }
+            var at = -1
+            for (var j = i + 1; j < playlistModel.count; j++)
+                if (playlistModel.get(j).uuid === row.uuid) { at = j; break }
+            if (at >= 0) { playlistModel.move(at, i, 1); playlistModel.set(i, row) }
+            else         playlistModel.insert(i, row)
         }
     }
 
@@ -1264,7 +1269,7 @@ Rectangle {
                                 Text {
                                     id: shortcutLabel; anchors.centerIn: parent
                                     text: modelData.k; color: Theme.textPrimary
-                                    font.pixelSize: 11; font.family: "monospace"
+                                    font.pixelSize: 11; font.family: app.monospaceFamily
                                 }
                             }
                             Text {

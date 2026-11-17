@@ -3,6 +3,7 @@
 #include <QJSValue>
 #include <QQmlEngine>
 #include <QSet>
+#include <QHash>
 #include "TidalClient.h"
 
 // QML-facing wrapper around TidalClient.
@@ -23,6 +24,15 @@ public:
 
     Q_INVOKABLE void fetchHomeMixes     (QJSValue cb);
     Q_INVOKABLE void fetchMixTracks     (const QString &mixId, QJSValue cb);
+    // cb(header, tracks, err): header is {id, title, subtitle, coverUrl, mixType, isRadio}.
+    Q_INVOKABLE void fetchMixPage       (const QString &mixId, QJSValue cb);
+    // Saved mixes and radio stations. Generated mixes ("My Mix 1") are not
+    // favourites and answer false here.
+    Q_INVOKABLE bool isMixFavorite      (const QString &mixId) const;
+    Q_INVOKABLE void addMixFavorite     (const QString &mixId, QJSValue cb);
+    Q_INVOKABLE void removeMixFavorite  (const QString &mixId, QJSValue cb);
+    // cb(mixId): the id of the track's radio station as a mix, "" if it has none.
+    Q_INVOKABLE void fetchTrackMix      (qlonglong trackId, QJSValue cb);
 
     Q_INVOKABLE void fetchFavoriteTracks  (QJSValue cb, int limit = 50, int offset = 0);
     Q_INVOKABLE void fetchFavoriteAlbums  (QJSValue cb, int limit = 50, int offset = 0);
@@ -36,7 +46,19 @@ public:
     Q_INVOKABLE void fetchArtistAlbums    (qlonglong artistId,     QJSValue cb);
     Q_INVOKABLE void fetchArtistTopTracks (qlonglong artistId,     QJSValue cb);
 
-    Q_INVOKABLE void search              (const QString &q,        QJSValue cb, int limit = 20);
+    // cb(results, err). results carries tracks/albums/artists/playlists/mixes
+    // and a <kind>Total for each, which is what paging stops on.
+    // `types` is one of TRACKS/ALBUMS/ARTISTS/PLAYLISTS/MIXES, or empty for all.
+    Q_INVOKABLE void search              (const QString &q,        QJSValue cb, int limit = 20, int offset = 0,
+                                          const QString &types = QString());
+    // The last few searches that found something, newest first, per account.
+    Q_INVOKABLE QStringList recentSearches() const;
+    Q_INVOKABLE void addRecentSearch     (const QString &q);
+    Q_INVOKABLE void removeRecentSearch  (const QString &q);
+    Q_INVOKABLE void clearRecentSearches ();
+    // Typing "gru", "grube", "grubenlampe" is one search, not three: a query
+    // that extends or is extended by an existing row replaces it.
+    static QStringList mergeRecentSearch(QStringList list, const QString &q, int max = 8);
     Q_INVOKABLE void copyToClipboard     (const QString &text);
 
     Q_INVOKABLE bool isTrackFavorite     (qlonglong trackId)  const;
@@ -53,6 +75,10 @@ public:
 
     // Playlist management
     Q_INVOKABLE void createPlaylist         (const QString &title, QJSValue cb);
+    // cb(success). The cached copy changes only on a yes from the server.
+    Q_INVOKABLE void fetchPlaylistMeta      (const QString &uuid, QJSValue cb);
+    Q_INVOKABLE void editPlaylist           (const QString &uuid, const QString &title,
+                                             const QString &description, QJSValue cb);
     Q_INVOKABLE void addTracksToPlaylist    (const QString &uuid, const QVariantList &trackIds, QJSValue cb);
     Q_INVOKABLE void moveTrackInPlaylist    (const QString &uuid, int fromIndex, int toIndex, QJSValue cb);
     Q_INVOKABLE void removeTrackFromPlaylist(const QString &uuid, int itemIndex, QJSValue cb);
@@ -62,6 +88,9 @@ public:
     // Track features
     Q_INVOKABLE void fetchTrackRadio(qlonglong trackId, QJSValue cb);
     Q_INVOKABLE void fetchLyrics    (qlonglong trackId, QJSValue cb);
+    // cb(credits, err): {groups: [{type, contributors: [{id, name}]}],
+    // copyright, isrc, releaseDate, upc}.
+    Q_INVOKABLE void fetchTrackCredits(qlonglong trackId, QJSValue cb);
 
     // Recently played
     Q_INVOKABLE void fetchRecentlyPlayed(QJSValue cb);
@@ -90,16 +119,25 @@ signals:
     void favoriteAlbumsChanged();
     void favoriteArtistsChanged();
     void favoritePlaylistsChanged();
+    void favoriteMixesChanged();
+    void recentSearchesChanged();
 
 private:
     void call(QJSValue &cb, const QJSValueList &args);
     void sortPlaylists(QList<Playlist> &playlists) const;
+public:
+    // `playtimes` maps a playlist uuid to when it was last played here, in ms.
+    static void sortByRecency(QList<Playlist> &playlists, const QVariantMap &playtimes);
+    // The fetched saved-mix ids with the saves and unsaves made meanwhile.
+    static QSet<QString> applyMixEdits(QSet<QString> ids, const QHash<QString, bool> &edits);
+private:
     void refreshPlaylistMeta(const QString &uuid);
     void loadFavoriteTrackIds();
     void loadNextFavoriteTracksPage(int offset);
     void loadNextFavoriteAlbumsPage(int offset);
     void loadNextFavoriteArtistsPage(int offset);
     void loadNextUserPlaylistsPage(int offset);
+    void loadFavoriteMixes();
 
     static QVariantMap  trackToMap  (const Track &t);
     static QVariantMap  albumToMap  (const Album &a);
@@ -128,4 +166,10 @@ private:
     QList<Album>    m_favoriteAlbums;
     QList<Artist>   m_favoriteArtists;
     QList<Playlist> m_favoritePlaylists;
+    QSet<QString>   m_favoriteMixIds;
+    bool                 m_favMixesLoading = false;
+    QHash<QString, bool> m_favMixEdits;   // mixId -> saved, made during a load
+    // The liked-songs list is built oldest-first and turned round when the last
+    // page lands. A like made before that goes on the back, after it on the front.
+    bool            m_favTracksSettled = false;
 };

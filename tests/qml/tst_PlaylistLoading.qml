@@ -18,6 +18,12 @@ TestCase {
         function fetchPlaylistTracks(uuid, callback) {
             requests.push({uuid: uuid, callback: callback})
         }
+        property var edits: []
+        property var metas: []
+        function fetchPlaylistMeta(uuid, callback) { metas.push({uuid: uuid, callback: callback}) }
+        function editPlaylist(uuid, title, description, callback) {
+            edits.push({uuid: uuid, title: title, description: description, callback: callback})
+        }
     }
     QtObject {
         id: offline
@@ -52,6 +58,8 @@ TestCase {
     }
     function init() {
         bridge.requests = []
+        bridge.edits = []
+        bridge.metas = []
         page = createTemporaryObject(pageComponent, testCase, {width: 1000, height: 800})
         verify(page !== null)
     }
@@ -112,6 +120,95 @@ TestCase {
         compare(page.loading, false)
         compare(page.loadError, "")
         compare(page.tracks[0].id, 2)
+    }
+
+    // The Edit popup used to write the new title locally and never tell the
+    // server, so a rename was lost on the next navigation.
+    function openEdit(title, description) {
+        page.playlistType = "USER"
+        page.playlistTitle = "Old"
+        page.playlistDescription = "Old words"
+        page.playlistUuid = "cached"
+        var popup = findChild(page, "editPlaylistPopup")
+        verify(popup !== null)
+        popup.open()
+        findChild(popup.contentItem, "editPlaylistTitle").text = title
+        findChild(popup.contentItem, "editPlaylistDescription").text = description
+        return popup
+    }
+
+    function test_renameReachesTheServerAndOnlyThenTheScreen() {
+        var popup = openEdit("  New  ", "New words")
+        popup.save()
+        compare(bridge.edits.length, 1)
+        compare(bridge.edits[0].uuid, "cached")
+        compare(bridge.edits[0].title, "New")
+        compare(bridge.edits[0].description, "New words", "both fields go, or the server clears one")
+        compare(page.playlistTitle, "Old", "nothing changes before the answer")
+        compare(popup.saving, true)
+        bridge.edits[0].callback(true)
+        compare(page.playlistTitle, "New")
+        compare(page.playlistDescription, "New words")
+        tryCompare(popup, "opened", false, 1000)
+    }
+
+    function test_refusedRenameKeepsTheOldTitleAndSaysSo() {
+        var popup = openEdit("New", "Old words")
+        popup.save()
+        bridge.edits[0].callback(false)
+        compare(page.playlistTitle, "Old")
+        verify(popup.error.length > 0)
+        compare(popup.opened, true, "what was typed is kept")
+        compare(popup.saving, false)
+        popup.close()
+    }
+
+    // Opened from the sidebar the page has no description. Saving a rename
+    // then posted an empty one and wiped what the server held.
+    function test_renameKeepsADescriptionThePageNeverHad() {
+        page.playlistType = "USER"
+        page.playlistTitle = "Old"
+        page.playlistUuid = "cached"
+        var popup = findChild(page, "editPlaylistPopup")
+        popup.begin()
+        findChild(popup.contentItem, "editPlaylistTitle").text = "New"
+        popup.save()
+        compare(bridge.edits.length, 0, "no save before the description is known")
+        bridge.metas[0].callback({uuid: "cached", description: "Server words"}, "")
+        popup.save()
+        compare(bridge.edits.length, 1)
+        compare(bridge.edits[0].description, "Server words")
+        bridge.edits[0].callback(true)
+        tryCompare(popup, "opened", false, 1000)
+    }
+
+    function test_unknownDescriptionBlocksTheSave() {
+        page.playlistType = "USER"
+        page.playlistTitle = "Old"
+        page.playlistUuid = "cached"
+        var popup = findChild(page, "editPlaylistPopup")
+        popup.begin()
+        bridge.metas[0].callback({}, "Network unavailable")
+        findChild(popup.contentItem, "editPlaylistTitle").text = "New"
+        popup.save()
+        compare(bridge.edits.length, 0)
+        verify(popup.error.length > 0)
+        popup.close()
+    }
+
+    function test_emptyTitleIsNotSent() {
+        var popup = openEdit("   ", "x")
+        popup.save()
+        compare(bridge.edits.length, 0)
+        verify(popup.error.length > 0)
+        popup.close()
+    }
+
+    function test_unchangedEditSendsNothing() {
+        var popup = openEdit("Old", "Old words")
+        popup.save()
+        compare(bridge.edits.length, 0)
+        tryCompare(popup, "opened", false, 1000)
     }
 
     function test_staleSilentReloadCannotOverwriteNewPlaylist() {

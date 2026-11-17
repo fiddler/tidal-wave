@@ -84,7 +84,7 @@ Rectangle {
                     : auth.state === 1 ? 400
                     : auth.state === 3 ? (errorMessage.length > 0 ? 420 : 370)
                     : 100
-            Behavior on height { NumberAnimation { duration: 200 } }
+            Behavior on height { NumberAnimation { duration: Theme.dur(200) } }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -112,7 +112,7 @@ Rectangle {
                         border.width: activeFocus ? 2 : 0
                         border.color: Theme.textPrimary
                         scale: loginHov.hovered ? 0.98 : 1
-                        Behavior on scale { NumberAnimation { duration: 100 } }
+                        Behavior on scale { NumberAnimation { duration: Theme.dur(100) } }
 
                         activeFocusOnTab: true
                         Keys.onReturnPressed: root.beginPkce()
@@ -350,7 +350,7 @@ Rectangle {
                                 opacity: 0.3
                                 SequentialAnimation on opacity {
                                     loops: Animation.Infinite
-                                    running: auth.state === 1 && AppFocus.active
+                                    running: auth.state === 1 && AppFocus.active && !Theme.reducedMotion
                                     PauseAnimation { duration: index * 200 }
                                     NumberAnimation { to: 1; duration: 400 }
                                     NumberAnimation { to: 0.3; duration: 400 }

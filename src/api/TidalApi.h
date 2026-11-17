@@ -5,6 +5,7 @@
 #include <QNetworkReply>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QUrlQuery>
 #include <functional>
 
@@ -13,6 +14,7 @@ class TidalApi : public QObject {
 public:
     using JsonCallback = std::function<void(QJsonObject, QString /*error*/)>;
     using RawCallback  = std::function<void(QByteArray, QString /*error*/)>;
+    using ArrayCallback = std::function<void(QJsonArray, QString /*error*/)>;
     // Same as JsonCallback plus the status the reply carried. Status 0 means
     // the request never reached Tidal at all — offline, blocked, DNS — which
     // says nothing about the credentials it was sent with.
@@ -32,6 +34,11 @@ public:
     // Status-carrying variants, for callers that must tell "Tidal said no"
     // from "Tidal was never reached".
     void getStatus(const QString &endpoint, const QUrlQuery &params, JsonStatusCallback cb);
+    // For the few endpoints whose reply is a bare JSON array (track credits).
+    void getArray(const QString &endpoint, const QUrlQuery &params, ArrayCallback cb);
+    // The v2 host. Saved mixes live only there.
+    void getV2(const QString &endpoint, const QUrlQuery &params, JsonCallback cb);
+    void putV2(const QString &endpoint, const QUrlQuery &params, JsonCallback cb);
     void postFormStatus(const QString &endpoint, const QUrlQuery &form, JsonStatusCallback cb);
     // POST against the authenticated API host (api.tidal.com), unlike post()/postForm()
     // which target the OAuth host (auth.tidal.com) and deliberately omit auth headers.
@@ -43,6 +50,12 @@ public:
     QNetworkReply* getRaw(const QUrl &url, RawCallback cb);
 
     static constexpr auto kApiBase  = "https://api.tidal.com/v1/";
+    static constexpr auto kApiBaseV2 = "https://api.tidal.com/v2/";
+    // An idle timeout, not a budget: Qt aborts a transfer only after this long
+    // with no bytes moving, so a long download that keeps flowing is untouched.
+    // Without it a request that connects and then goes quiet never finishes,
+    // and whatever spinner waits on its callback spins for the life of the app.
+    static constexpr int kTransferTimeoutMs = 15000;
     static constexpr auto kAuthBase = "https://auth.tidal.com/v1/";
 
 private:
@@ -51,6 +64,8 @@ private:
     QString m_countryCode;
 
     QNetworkRequest makeRequest(const QUrl &url);
+    void getDoc(const QString &base, const QString &endpoint, const QUrlQuery &params,
+                std::function<void(QJsonDocument, QString, int)> cb);
     void postStatus(const QString &endpoint, const QByteArray &body,
                     const QMap<QString,QString> &extraHeaders, JsonStatusCallback cb);
 };

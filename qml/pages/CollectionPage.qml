@@ -48,6 +48,9 @@ Rectangle {
         function onFavoriteAlbumsChanged() { root.updateFilteredContent() }
         function onFavoriteArtistsChanged() { root.updateFilteredContent() }
         function onFavoritePlaylistsChanged() { root.updateFilteredContent() }
+        // A mix saved or unsaved elsewhere: the tab is the generated feed
+        // merged with the saved list, so it has to be asked for again.
+        function onFavoriteMixesChanged() { if (root.mixes.length > 0 || root.activeTab === 4) root.loadMixes() }
     }
 
     function updateFilteredContent() {
@@ -66,8 +69,12 @@ Rectangle {
             playlistsGrid.contentY = prevY
     }
 
+    // A save then an unsave starts two fetches; only the last may answer.
+    property int _mixGen: 0
     function loadMixes() {
+        var gen = ++_mixGen
         bridge.fetchHomeMixes(function(mixList, err) {
+            if (gen !== root._mixGen) return
             if (err.length > 0) return
             var items = []
             for (var i = 0; i < mixList.length; i++) {
@@ -256,16 +263,19 @@ Rectangle {
                 Menu {
                     id: albumCtxMenu
                     background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 8; implicitWidth: 180 }
-                    MenuItem {
+                    IconMenuItem {
                         text: "Remove from library"
-                        contentItem: Text { text: parent.text; color: Theme.red; font.pixelSize: 13; leftPadding: 12; verticalAlignment: Text.AlignVCenter }
-                        background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
-                        onTriggered: bridge.removeAlbumFavorite(albumDelegate.modelData.id, function(ok) {})
+                        iconName: "trash"
+                        textColor: Theme.red
+                        onTriggered: {
+                            var w = Window.window
+                            bridge.removeAlbumFavorite(albumDelegate.modelData.id,
+                                function(ok) { if (!ok) w.favoriteFailed("your saved albums") })
+                        }
                     }
-                    MenuItem {
+                    IconMenuItem {
                         text: "Go to album"
-                        contentItem: Text { text: parent.text; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 12; verticalAlignment: Text.AlignVCenter }
-                        background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
+                        iconName: "disc"
                         onTriggered: navigateTo("album", { albumId: albumDelegate.modelData.id })
                     }
                 }
@@ -317,16 +327,19 @@ Rectangle {
                 Menu {
                     id: artistCtxMenu
                     background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 8; implicitWidth: 180 }
-                    MenuItem {
+                    IconMenuItem {
                         text: "Unfollow artist"
-                        contentItem: Text { text: parent.text; color: Theme.red; font.pixelSize: 13; leftPadding: 12; verticalAlignment: Text.AlignVCenter }
-                        background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
-                        onTriggered: bridge.removeArtistFavorite(artistDelegate.modelData.id, function(ok) {})
+                        iconName: "x"
+                        textColor: Theme.red
+                        onTriggered: {
+                            var w = Window.window
+                            bridge.removeArtistFavorite(artistDelegate.modelData.id,
+                                function(ok) { if (!ok) w.favoriteFailed("followed artists") })
+                        }
                     }
-                    MenuItem {
+                    IconMenuItem {
                         text: "Go to artist"
-                        contentItem: Text { text: parent.text; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 12; verticalAlignment: Text.AlignVCenter }
-                        background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
+                        iconName: "artist"
                         onTriggered: navigateTo("artist", { artistId: artistDelegate.modelData.id })
                     }
                 }
@@ -420,7 +433,7 @@ Rectangle {
                 MediaCard {
                     anchors.centerIn: parent
                     title: modelData.title
-                    subtitle: modelData.subtitle || ""
+                    subtitle: modelData.subtitle || (modelData.isRadio ? "Radio" : "")
                     coverUrl: modelData.coverUrl || ""
                     mediaType: "mix"
                     onClicked: navigateTo("mix", { mixId: modelData.id, title: modelData.title, subtitle: modelData.subtitle, coverUrl: modelData.coverUrl })

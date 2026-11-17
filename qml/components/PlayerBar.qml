@@ -79,10 +79,23 @@ Rectangle {
                 }
                 // The artist name is a link to the artist page — off for local
                 // files, which carry no Tidal artist id.
+                // Several artists: each name its own link. One artist keeps
+                // the single focusable link below.
+                ArtistLinks {
+                    visible: artistLink.multi
+                    Layout.fillWidth: true
+                    artists: artistLink.multi ? root.track.artistList : []
+                    fallbackText: hasTrack ? track.artists : ""
+                    pixelSize: 12
+                    keyboardFocus: true
+                }
                 Text {
                     id: artistLink
                     readonly property bool isLink: root.hasTrack && !root.isLocalTrack
                                                    && root.track.artistId > 0
+                    readonly property bool multi: isLink && !!root.track.artistList
+                                                  && root.track.artistList.length > 1
+                    visible: !multi
                     Layout.fillWidth: true
                     text: hasTrack ? track.artists : ""
                     color: isLink && artistHov.containsMouse ? Theme.textPrimary : Theme.textSec
@@ -145,11 +158,10 @@ Rectangle {
                 HoverHandler { id: likeTipHov }
                 onClicked: {
                     var trackId = root.track.id
-                    if (root.isLiked) {
-                        bridge.removeTrackFavorite(trackId, function(success) {})
-                    } else {
-                        bridge.addTrackFavorite(trackId, function(success) {})
-                    }
+                    var w = root.Window.window
+                    var failed = function(ok) { if (!ok) w.favoriteFailed("Liked Songs") }
+                    if (root.isLiked) bridge.removeTrackFavorite(trackId, failed)
+                    else              bridge.addTrackFavorite(trackId, failed)
                 }
             }
         }

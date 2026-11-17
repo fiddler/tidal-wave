@@ -41,12 +41,26 @@ Rectangle {
         function onFavoriteAlbumsChanged() { root.updateSavedState() }
     }
 
+    // What the server said when it would not hand the album over:
+    // "unavailable" for a 404, "error" for anything else. A saved favourite
+    // whose edition has been delisted keeps appearing in the collection while
+    // albums/<id> answers 404, and a page that drew nothing for that looked
+    // exactly like a broken app.
+    property string loadState: ""
+    readonly property bool showFailure: loadState.length > 0 && !loading
+                                        && !(albumData.id > 0) && tracks.length === 0
+
     function loadAlbum() {
         loading = true
-        bridge.fetchAlbum(albumId, function(album, err) {
+        loadState = ""
+        var id = albumId
+        bridge.fetchAlbum(albumId, function(album, err, status) {
+            if (id !== root.albumId) return
             if (!err) albumData = album
+            else root.loadState = status === 404 ? "unavailable" : "error"
         })
         bridge.fetchAlbumTracks(albumId, function(t, err) {
+            if (id !== root.albumId) return
             loading = false
             if (!err) tracks = t
         })
@@ -56,6 +70,9 @@ Rectangle {
         id: tracksList
         anchors.fill: parent
         clip: true
+        // Hidden rather than left behind the panel, so a blank hero's Play and
+        // Save pills are not hit targets over an album that does not exist.
+        visible: !root.showFailure
         model: root.tracks
         boundsBehavior: Flickable.StopAtBounds
 
@@ -130,24 +147,14 @@ Rectangle {
                             wrapMode: Text.WordWrap
                         }
 
-                        Text {
-                            id: artistNameText
-                            text: albumData.artists || ""
-                            color: root.effectiveArtistId > 0 ? Theme.accent : Theme.textSec
-                            font.pixelSize: 14
-                            activeFocusOnTab: root.effectiveArtistId > 0
-                            Keys.onReturnPressed: if (root.effectiveArtistId > 0) root.navigateTo("artist", { artistId: root.effectiveArtistId })
-                            Keys.onSpacePressed:  if (root.effectiveArtistId > 0) root.navigateTo("artist", { artistId: root.effectiveArtistId })
-                            Rectangle {
-                                anchors.fill: parent; anchors.margins: -4; radius: 4; color: "transparent"
-                                border.width: artistNameText.activeFocus ? 2 : 0
-                                border.color: Theme.accent
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: root.effectiveArtistId > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: if (root.effectiveArtistId > 0) root.navigateTo("artist", { artistId: root.effectiveArtistId })
-                            }
+                        ArtistLinks {
+                            Layout.fillWidth: true
+                            artists: albumData.artistList || []
+                            fallbackText: albumData.artists || ""
+                            keyboardFocus: true
+                            color: Theme.accent
+                            hoverColor: Theme.accent
+                            pixelSize: 14
                         }
 
                         Text {
@@ -195,11 +202,10 @@ Rectangle {
                                 glyph: root.isSaved ? "♥" : "♡"
                                 accent: root.isSaved
                                 onClicked: {
-                                    if (root.isSaved) {
-                                        bridge.removeAlbumFavorite(root.albumId, function(success) {})
-                                    } else {
-                                        bridge.addAlbumFavorite(root.albumId, function(success) {})
-                                    }
+                                    var w = Window.window
+                                    var failed = function(ok) { if (!ok) w.favoriteFailed("your saved albums") }
+                                    if (root.isSaved) bridge.removeAlbumFavorite(root.albumId, failed)
+                                    else              bridge.addAlbumFavorite(root.albumId, failed)
                                 }
                             }
                         }
@@ -276,6 +282,59 @@ Rectangle {
         Rectangle {
             anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border
             opacity: Math.min(1, Math.max(0, (tracksList.contentY - 200) / 80))
+        }
+    }
+
+    ColumnLayout {
+        objectName: "albumFailure"
+        visible: root.showFailure
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 96, 460)
+        spacing: 12
+
+        VectorIcon {
+            Layout.alignment: Qt.AlignHCenter
+            name: "music"; width: 40; height: 40; color: Theme.textDim; strokeWidth: 1.5
+        }
+        Text {
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
+            text: root.loadState === "unavailable" ? "This album is no longer on Tidal"
+                                                   : "Couldn't load this album"
+            color: Theme.textPrimary; font.pixelSize: 18; font.bold: true
+            wrapMode: Text.WordWrap
+        }
+        Text {
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
+            text: root.loadState === "unavailable"
+                  ? "This release was withdrawn. Searching for the title often finds another edition."
+                  : "Check your connection and try again."
+            color: Theme.textSec; font.pixelSize: 13
+            wrapMode: Text.WordWrap
+        }
+        Row {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: 8
+            spacing: 12
+            PillButton {
+                objectName: "albumRetry"
+                visible: root.loadState === "error"
+                text: "Retry"; accent: true
+                onClicked: root.loadAlbum()
+            }
+            PillButton {
+                visible: root.loadState === "unavailable" && root.isSaved
+                width: 190
+                text: "Remove from library"; accent: false
+                onClicked: {
+                    var w = Window.window
+                    bridge.removeAlbumFavorite(root.albumId, function(ok) {
+                        if (!ok) w.favoriteFailed("your saved albums")
+                        else     w.goBack()
+                    })
+                }
+            }
         }
     }
 

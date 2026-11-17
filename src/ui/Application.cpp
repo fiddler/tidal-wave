@@ -12,6 +12,7 @@
 #include <QQmlContext>
 #include <QDateTime>
 #include <QFont>
+#include <QFontDatabase>
 #include <QIcon>
 #include <QImage>
 #include <QFile>
@@ -185,9 +186,19 @@ int Application::run(int argc, char **argv) {
         });
     }
 
-    QFont defaultFont("Inter");
-    defaultFont.setFamilies({"Inter", "DejaVu Sans", "sans-serif"});
-    QApplication::setFont(defaultFont);
+    // Name no family that is not installed. The first one that fails to
+    // resolve makes Qt scan every font alias on the system, 74 ms at each
+    // launch here, and dropping one missing name only promotes the next. With
+    // none of them present the platform's own UI font stays, which is what the
+    // fallback resolved to anyway.
+    QStringList families;
+    for (const QString &f : { QStringLiteral("Inter"), QStringLiteral("DejaVu Sans") })
+        if (QFontDatabase::hasFamily(f)) families << f;
+    if (!families.isEmpty()) {
+        QFont defaultFont(families.first());
+        defaultFont.setFamilies(families);
+        QApplication::setFont(defaultFont);
+    }
     // macOS defaults to the native style, which rejects the control
     // customizations in SideBar.qml. Basic is what Linux uses by default.
     QQuickStyle::setStyle("Basic");
@@ -413,4 +424,16 @@ void Application::toggleWindow() {
             }
         }
     }
+}
+
+QString Application::monospaceFamily() const {
+    return QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+}
+
+bool Application::reducedMotion() const {
+#ifdef Q_OS_MACOS
+    return macReduceMotion();
+#else
+    return false;
+#endif
 }

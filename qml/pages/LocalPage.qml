@@ -301,7 +301,7 @@ Rectangle {
                     height: parent.height; radius: 2
                     color: Theme.accent
                     width: importCard.total > 0 ? parent.width * (importCard.done / importCard.total) : 0
-                    Behavior on width { NumberAnimation { duration: 120 } }
+                    Behavior on width { NumberAnimation { duration: Theme.dur(120) } }
                 }
             }
         }

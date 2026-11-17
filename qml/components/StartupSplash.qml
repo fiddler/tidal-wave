@@ -47,7 +47,7 @@ Rectangle {
             color: Theme.textSec
             font.pixelSize: 14
             opacity: root.slow ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 200 } }
+            Behavior on opacity { NumberAnimation { duration: Theme.dur(200) } }
         }
     }
 }

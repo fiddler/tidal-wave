@@ -64,6 +64,21 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 >   one axis only, and read an angle a trackpad does not send), and a row with
 >   more cards than fit gets hover arrows and a scrollbar (upstream bug)
 >
+> Taken back from upstream 0.4.0, rewritten here because the trees no longer
+> merge. The designs are immineal's:
+>
+> - **Search that pages.** Each result tab loads more as you scroll, and
+>   recent searches are kept
+> - **Credits and a reading view.** Who played and produced a track, from its
+>   menu or Now Playing; lyrics can fill the page in large type
+> - **Saved mixes and radio.** A track's radio opens as a mix you can save, and
+>   saved mixes appear in the collection
+> - **Every artist is a link**, not just the first one credited
+> - **Lists that move.** A reordered queue row or sidebar playlist travels to
+>   its new place; all of it stops when macOS "Reduce motion" is on
+> - **Whole discography.** Artist pages show singles, EPs and compilations
+> - **Drawn icons** in every context menu
+>
 > Upstream maintainers: every commit is scoped and conventional — cherry-pick
 > anything you like, or ask for a focused PR of any subset.
 

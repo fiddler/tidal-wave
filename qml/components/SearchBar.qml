@@ -19,6 +19,11 @@ Rectangle {
     function releaseFocus() {
         input.focus = false
     }
+    // Puts the cursor in the field. Focusing this Rectangle, or the Loader a
+    // page sits in, leaves the field itself without active focus.
+    function takeFocus() {
+        input.forceActiveFocus()
+    }
 
     RowLayout {
         anchors.fill: parent

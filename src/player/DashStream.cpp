@@ -41,7 +41,13 @@ void DashNet::request(const QUrl &url, qint64 first, qint64 last, Callback cb) {
 
 void DashNet::doRequest(const QUrl &url, qint64 first, qint64 last, const Callback &cb) {
     // Created lazily so it belongs to this thread, not whoever constructed us.
-    if (!m_nam) m_nam = new QNetworkAccessManager(this);
+    if (!m_nam) {
+        m_nam = new QNetworkAccessManager(this);
+        // mpv's read blocks on this reply. A segment request that connects and
+        // then goes silent would hold it for ever; the idle timeout turns that
+        // into an error mpv can act on.
+        m_nam->setTransferTimeout(15000);
+    }
 
     QNetworkRequest req(url);
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,

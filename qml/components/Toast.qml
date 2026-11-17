@@ -34,5 +34,5 @@ Rectangle {
     }
 
     Timer { id: life; interval: 4000; onTriggered: root.opacity = 0 }
-    Behavior on opacity { NumberAnimation { duration: 200 } }
+    Behavior on opacity { NumberAnimation { duration: Theme.dur(200) } }
 }

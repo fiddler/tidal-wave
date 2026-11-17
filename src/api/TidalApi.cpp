@@ -2,10 +2,17 @@
 #include <QNetworkReply>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
+#include <chrono>
 
 TidalApi::TidalApi(QObject *parent) : QObject(parent) {
     m_nam = new QNetworkAccessManager(this);
     m_nam->setRedirectPolicy(QNetworkRequest::NoLessSafeRedirectPolicy);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+    m_nam->setTransferTimeout(std::chrono::milliseconds(kTransferTimeoutMs));
+#else
+    m_nam->setTransferTimeout(kTransferTimeoutMs);
+#endif
 }
 
 void TidalApi::setAccessToken(const QString &token) { m_accessToken = token; }
@@ -31,7 +38,23 @@ void TidalApi::get(const QString &endpoint, const QUrlQuery &params, JsonCallbac
 }
 
 void TidalApi::getStatus(const QString &endpoint, const QUrlQuery &params, JsonStatusCallback cb) {
-    QUrl url(kApiBase + endpoint);
+    getDoc(QString::fromLatin1(kApiBase), endpoint, params,
+        [cb](QJsonDocument doc, QString err, int status) { cb(doc.object(), err, status); });
+}
+
+void TidalApi::getArray(const QString &endpoint, const QUrlQuery &params, ArrayCallback cb) {
+    getDoc(QString::fromLatin1(kApiBase), endpoint, params,
+        [cb](QJsonDocument doc, QString err, int) { cb(doc.array(), err); });
+}
+
+void TidalApi::getV2(const QString &endpoint, const QUrlQuery &params, JsonCallback cb) {
+    getDoc(QString::fromLatin1(kApiBaseV2), endpoint, params,
+        [cb](QJsonDocument doc, QString err, int) { cb(doc.object(), err); });
+}
+
+void TidalApi::getDoc(const QString &base, const QString &endpoint, const QUrlQuery &params,
+                      std::function<void(QJsonDocument, QString, int)> cb) {
+    QUrl url(base + endpoint);
     QUrlQuery q = params;
     if (!m_countryCode.isEmpty()) q.addQueryItem("countryCode", m_countryCode);
     url.setQuery(q);
@@ -50,7 +73,33 @@ void TidalApi::getStatus(const QString &endpoint, const QUrlQuery &params, JsonS
             cb({}, err.errorString(), status);
             return;
         }
-        cb(doc.object(), {}, status);
+        cb(doc, {}, status);
+    });
+}
+
+void TidalApi::putV2(const QString &endpoint, const QUrlQuery &params, JsonCallback cb) {
+    QUrl url(kApiBaseV2 + endpoint);
+    QUrlQuery q = params;
+    if (!m_countryCode.isEmpty()) q.addQueryItem("countryCode", m_countryCode);
+    url.setQuery(q);
+
+    // Empty body, so Qt sends Content-Length: 0 rather than omitting the header.
+    auto *reply = m_nam->put(makeRequest(url), QByteArray());
+    connect(reply, &QNetworkReply::finished, this, [reply, cb]() {
+        reply->deleteLater();
+        const QByteArray data = reply->readAll();
+        if (data.isEmpty()) {
+            cb({}, reply->error() == QNetworkReply::NoError ? QString() : reply->errorString());
+            return;
+        }
+        QJsonParseError err;
+        const auto doc = QJsonDocument::fromJson(data, &err);
+        if (err.error != QJsonParseError::NoError) { cb({}, err.errorString()); return; }
+        const auto obj = doc.object();
+        if (obj.contains("error"))
+            cb(obj, obj["error_description"].toString(obj["error"].toString()));
+        else
+            cb(obj, {});
     });
 }
 
@@ -205,16 +254,24 @@ void TidalApi::postApiFormEtag(const QString &endpoint, const QUrlQuery &form, c
     connect(reply, &QNetworkReply::finished, this, [reply, cb]() {
         reply->deleteLater();
         QByteArray data = reply->readAll();
+        const bool failed = reply->error() != QNetworkReply::NoError;
         if (data.isEmpty()) {
-            cb({}, reply->error() == QNetworkReply::NoError ? QString() : reply->errorString());
+            cb({}, failed ? reply->errorString() : QString());
             return;
         }
         QJsonParseError err;
         auto doc = QJsonDocument::fromJson(data, &err);
-        if (err.error != QJsonParseError::NoError) { cb({}, err.errorString()); return; }
+        if (err.error != QJsonParseError::NoError) {
+            cb({}, failed ? reply->errorString() : err.errorString());
+            return;
+        }
         auto obj = doc.object();
+        // A refusal carries {status, subStatus, userMessage} and no "error"
+        // key, so the HTTP status decides, not the body.
         if (obj.contains("error"))
             cb(obj, obj["error_description"].toString(obj["error"].toString()));
+        else if (failed)
+            cb(obj, obj["userMessage"].toString(reply->errorString()));
         else
             cb(obj, {});
     });

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Window
 import TidalWave
 
 Rectangle {
@@ -27,13 +28,38 @@ Rectangle {
         player.playTracks(list, i)
     }
 
-    onMixIdChanged: if (mixId.length > 0) loadMix()
+    // A track's radio station is a mix like any other; only the label differs.
+    property bool   isRadio: false
+    property bool   isSaved: false
+    property string loadError: ""
+
+    function updateSavedState() {
+        isSaved = mixId.length > 0 ? bridge.isMixFavorite(mixId) : false
+    }
+
+    onMixIdChanged: if (mixId.length > 0) { loadMix(); updateSavedState() }
+
+    Connections {
+        target: bridge
+        function onFavoriteMixesChanged() { root.updateSavedState() }
+    }
 
     function loadMix() {
         loading = true
-        bridge.fetchMixTracks(mixId, function(t, err) {
+        loadError = ""
+        var id = mixId
+        bridge.fetchMixPage(mixId, function(header, t, err) {
+            if (id !== root.mixId) return
             loading = false
-            if (!err) tracks = t
+            if (err) { root.loadError = "Couldn't load this mix. Check your connection."; return }
+            tracks = t
+            // The page's own header wins over what the caller passed: a mix
+            // opened by id alone ("Playing from") arrives with no title, and
+            // one opened from a track arrives with a guessed one.
+            root.isRadio = !!header.isRadio
+            if (header.title)    root.title    = header.title
+            if (header.subtitle) root.subtitle = header.subtitle
+            if (header.coverUrl) root.coverUrl = header.coverUrl
         })
     }
 
@@ -77,7 +103,7 @@ Rectangle {
                         smooth: true
                         mipmap: true
                         opacity: status === Image.Ready ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                        Behavior on opacity { NumberAnimation { duration: Theme.dur(200) } }
                     }
                     VectorIcon {
                         visible: mixCover.status !== Image.Ready
@@ -96,7 +122,7 @@ Rectangle {
                     spacing: 8
 
                     Text {
-                        text: "Mix"
+                        text: root.isRadio ? "Radio" : "Mix"
                         color: Theme.textDim
                         font.pixelSize: 12
                         font.bold: true
@@ -142,6 +168,19 @@ Rectangle {
                                 }
                             }
                         }
+
+                        PillButton {
+                            objectName: "mixSave"
+                            text: root.isSaved ? "Saved" : "Save"
+                            glyph: root.isSaved ? "♥" : "♡"
+                            accent: root.isSaved
+                            onClicked: {
+                                var w = root.Window.window
+                                var failed = function(ok) { if (!ok) w.favoriteFailed("your saved mixes") }
+                                if (root.isSaved) bridge.removeMixFavorite(root.mixId, failed)
+                                else              bridge.addMixFavorite(root.mixId, failed)
+                            }
+                        }
                     }
                 }
             }
@@ -173,6 +212,14 @@ Rectangle {
     }
 
     BackButton { anchors { top: parent.top; left: parent.left; margins: 16 } }
+
+    Text {
+        visible: root.loadError.length > 0 && !root.loading && root.tracks.length === 0
+        anchors.centerIn: parent
+        text: root.loadError
+        color: Theme.textSec
+        font.pixelSize: 14
+    }
 
     LoadingOverlay { loading: root.loading }
 }

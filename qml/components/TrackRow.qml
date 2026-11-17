@@ -196,7 +196,7 @@ Item {
         border.width: root.activeFocus ? 2 : 0
         border.color: Theme.accent
 
-        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on color { ColorAnimation { duration: Theme.dur(120) } }
 
         MouseArea {
             id: hov
@@ -337,12 +337,16 @@ Item {
                     font.pixelSize: 14
                     elide: Text.ElideRight
                 }
-                Text {
+                // Each artist is its own link. Hover is read off the row's
+                // MouseArea, for the reason given at the album link below.
+                ArtistLinks {
                     Layout.fillWidth: true
-                    text: root.artists
+                    artists: (root.trackData && root.trackData.artistList) || []
+                    fallbackText: root.artists
                     color: root.isUnavailable ? Theme.textDim : Theme.textSec
-                    font.pixelSize: 12
-                    elide: Text.ElideRight
+                    pixelSize: 12
+                    linksEnabled: !root.isLocalTrack
+                    hoverSource: hov
                 }
             }
 
@@ -523,44 +527,41 @@ Item {
 
         // Shown in place of the playback items when Tidal no longer streams
         // the track, so the reason is visible where the user looks for it.
-        MenuItem {
-            text: "⃠  Not available on Tidal"
+        IconMenuItem {
+            text: "Not available on Tidal"
+            iconName: "ban"
+            textColor: Theme.textDim
+            hoverable: false
             visible: root.isUnavailable
             height: visible ? implicitHeight : 0
             enabled: false
-            contentItem: Text { text: parent.text; color: Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: "transparent" }
         }
-        MenuItem {
-            text: "▶  Play now"
+        IconMenuItem {
+            text: "Play now"
+            iconName: "play"
             visible: !root.isUnavailable
             height: visible ? implicitHeight : 0
-            contentItem: Text { text: parent.text; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: root.playRequested()
         }
-        MenuItem {
-            text: "+  Add to queue"
+        IconMenuItem {
+            text: "Add to queue"
+            iconName: "plus"
             visible: !root.isUnavailable
             height: visible ? implicitHeight : 0
-            contentItem: Text { text: parent.text; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: { if (root.trackData) player.appendQueue([root.trackData]) }
         }
-        MenuItem {
-            text: "⬇  Download…"
+        IconMenuItem {
+            text: "Download…"
+            iconName: "download"
             visible: !root.isLocalTrack && !root.isUnavailable
             height: visible ? implicitHeight : 0
             enabled: root.trackData !== null && root.dlState !== "busy"
-            contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: { if (root.trackData) downloader.downloadTrack(root.trackData) }
         }
-        MenuItem {
-            text: "📋  Add to playlist"
+        IconMenuItem {
+            text: "Add to playlist"
+            iconName: "list-plus"
             enabled: root.trackData !== null
-            contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: {
                 if (!root.trackData) return
                 // Acting on a multi-selection adds everything selected.
@@ -577,95 +578,93 @@ Item {
                 }
             }
         }
-        MenuItem {
-            text: "🗑  Remove from playlist"
+        IconMenuItem {
+            text: "Remove from playlist"
+            iconName: "trash"
+            textColor: Theme.red
             visible: root.playlistUuid.length > 0 || root.localPlaylistId > 0
             height: visible ? implicitHeight : 0
             enabled: root.trackData !== null && (root.playlistUuid.length > 0 || root.localPlaylistId > 0)
-            contentItem: Text { text: parent.text; color: parent.enabled ? Theme.red : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: {
                 if (root.trackData && root.trackItemIndex >= 0
                     && (root.playlistUuid.length > 0 || root.localPlaylistId > 0))
                     root.removeFromPlaylistRequested(root.trackItemIndex)
             }
         }
-        MenuItem {
+        IconMenuItem {
             text: (root.selection && root.selected && root.selection.count > 1)
-                  ? "🗑  Remove " + root.selection.count + " from library" : "🗑  Remove from library"
+                  ? "Remove " + root.selection.count + " from library" : "Remove from library"
+            iconName: "trash"
+            textColor: Theme.red
             visible: root.canRemoveFromLibrary && root.isLocalTrack
             height: visible ? implicitHeight : 0
-            contentItem: Text { text: parent.text; color: Theme.red; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: root.removeFromLibrary()
         }
-        MenuItem {
-            text: "📻  Start radio"
+        IconMenuItem {
+            text: "Start radio"
+            iconName: "radio"
             visible: !root.isLocalTrack
             height: visible ? implicitHeight : 0
             enabled: root.trackData !== null
-            contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: {
-                if (!root.trackData) return
-                Window.window.navigate("radio", {
-                    trackId:    root.trackData.id,
-                    radioTitle: root.trackData.title
-                })
+                if (root.trackData) root.Window.window.openTrackRadio(root.trackData)
             }
         }
-        MenuItem {
-            text: root.isLiked ? "♥  Unlike" : "♡  Like"
+        IconMenuItem {
+            text: root.isLiked ? "Unlike" : "Like"
+            iconName: root.isLiked ? "heart-filled" : "heart"
             visible: !root.isLocalTrack
             height: visible ? implicitHeight : 0
             enabled: root.trackData !== null
-            contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: {
                 if (!root.trackData) return
-                if (root.isLiked) {
-                    bridge.removeTrackFavorite(root.trackData.id, function(success) {})
-                } else {
-                    bridge.addTrackFavorite(root.trackData.id, function(success) {})
-                }
+                var w = root.Window.window
+                var failed = function(ok) { if (!ok) w.favoriteFailed("Liked Songs") }
+                if (root.isLiked) bridge.removeTrackFavorite(root.trackData.id, failed)
+                else              bridge.addTrackFavorite(root.trackData.id, failed)
             }
         }
         MenuSeparator { visible: !root.isLocalTrack; height: visible ? implicitHeight : 0 }
-        MenuItem {
-            text: "💿  Go to album"
+        IconMenuItem {
+            text: "Go to album"
+            iconName: "disc"
             visible: !root.isLocalTrack
             height: visible ? implicitHeight : 0
             enabled: root.trackData && root.trackData.albumId > 0
-            contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: {
                 if (root.trackData && root.trackData.albumId > 0)
                     Window.window.navigate("album", { albumId: root.trackData.albumId })
             }
         }
-        MenuItem {
-            text: "🎤  Go to artist"
+        IconMenuItem {
+            text: "Go to artist"
+            iconName: "artist"
             visible: !root.isLocalTrack
             height: visible ? implicitHeight : 0
             enabled: root.trackData && root.trackData.artistId > 0
-            contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
             onTriggered: {
                 if (root.trackData && root.trackData.artistId > 0)
                     Window.window.navigate("artist", { artistId: root.trackData.artistId })
             }
         }
-        MenuSeparator { visible: !root.isLocalTrack; height: visible ? implicitHeight : 0 }
-        MenuItem {
-            text: "🔗  Copy link"
+        IconMenuItem {
+            text: "Credits"
+            iconName: "info"
             visible: !root.isLocalTrack
             height: visible ? implicitHeight : 0
             enabled: root.trackData !== null
-            contentItem: Text { text: parent.text; color: parent.enabled ? Theme.textPrimary : Theme.textDim; font.pixelSize: 13; leftPadding: 12; horizontalAlignment: Text.AlignLeft; verticalAlignment: Text.AlignVCenter }
-            background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
+            onTriggered: if (root.trackData) root.Window.window.showCredits(root.trackData)
+        }
+        MenuSeparator { visible: !root.isLocalTrack; height: visible ? implicitHeight : 0 }
+        IconMenuItem {
+            text: "Copy link"
+            iconName: "link"
+            visible: !root.isLocalTrack
+            height: visible ? implicitHeight : 0
+            enabled: root.trackData !== null
             onTriggered: {
                 if (root.trackData)
-                    bridge.copyToClipboard("https://tidal.com/browse/track/" + root.trackData.id)
+                    bridge.copyToClipboard("https://tidal.com/track/" + root.trackData.id)
             }
         }
     }

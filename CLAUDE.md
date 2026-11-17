@@ -15,6 +15,20 @@ Run it in the **foreground** from Bash with a 60s timeout, which backgrounds it 
 for AppleScript tests. `run_in_background: true` also works once the bundle is clean. An app that
 "dies within seconds" is almost always the Qt double-load below, not the backgrounding.
 
+## Tests
+
+`ctest --test-dir build` runs both suites, about seven seconds. `tst_api` feeds fixtures to the
+static parsers in `TidalClient` and needs no network. `tests/run-qml-tests.py` runs the real QML
+pages against stub `bridge` and `player` objects declared in each test file. A page under test has
+no `Window.window.navigate`, so test what a click calls on the stubs, not where it navigates.
+
+`ListView.itemAtIndex()` right after a model move still answers the old order; `wait()` past the
+move transition before asserting on it.
+
+Two traps. moc sees no test class in a file that contains a raw string literal, so fixtures in
+`tests/cpp` use single quotes and `json()` swaps them. And a `mouseClick` on something that became
+visible in the same tick lands at its old geometry: `waitForRendering(page)` first.
+
 ## The bundle traps
 
 The build bundle is deployed **in place**. After a `deploy`, `build/Tidal Wave.app` carries
@@ -157,6 +171,37 @@ prompt, but it can never recover. To test reconnection, point `kApiBase` at
 `~/.config/tidal-wave/credentials.json` there). Start with nothing listening, then bring up a
 small Python stub for `sessions` and `users/{id}`. The isolated HOME keeps the stub's fake user id
 out of the real credentials file.
+
+## Tidal API facts (probed live 2026-10-09, PKCE token)
+
+- **Search returns no mixes.** `v1/search` answers `tracks`, `albums`, `artists`, `playlists`,
+  `videos`, `topHit` and nothing else, on four queries including "my mix". `v2/search` has no
+  mixes key either. Upstream's "finds mixes" (`5ff0832`) cites only stub tests, no live reply. The
+  Mixes search tab therefore hides itself unless a reply carries some (`SearchPage.qml`).
+- **`types` on `v1/search` is ignored.** `types=MIXES` and `types=ALBUMS` both return all four
+  kinds. A page of one tab downloads the other three.
+- `artists/<id>/albums` unfiltered is albums only. `filter=EPSANDSINGLES` and
+  `filter=COMPILATIONS` are separate, disjoint lists.
+- Favourites take `order=DATE&orderDirection=DESC`. Without it artists come back by name.
+- A track's radio is a mix: `tracks/<id>` carries `mixes.TRACK_MIX`, and `pages/mix?mixId=`
+  returns a `MIX_HEADER` and a `TRACK_LIST`. Saved mixes live at `v2/favorites/mixes`.
+- `tracks/<id>/credits?includeContributors=true` is a bare JSON array of `{type, contributors}`.
+- A delisted album answers 404 subStatus 2001 while favourites still list it.
+- `playbackinfopostpaywall` serves this client FLAC (93 of 93 streams in `playback.jsonl`,
+  28 Aug to 22 Sep). Upstream's device-code client gets 320 kbps AAC from it.
+
+## QML conventions
+
+- **Durations go through `Theme.dur(ms)`.** It returns 0 when the system "reduce motion" setting
+  is on (`app.reducedMotion`, read once at launch, copied into `Theme` by `Main.qml`). Spinners
+  are exempt: they report progress. Decorative loops add `&& !Theme.reducedMotion` to `running`.
+- **Name no font family that may be missing.** The first family Qt cannot resolve costs a scan of
+  every font alias, 74 ms per launch here. `Application.cpp` filters its list through
+  `QFontDatabase::hasFamily`; QML uses `app.monospaceFamily`, never `"monospace"`.
+- **A list animates a reorder only if its model is told about the move.** Assigning a new JS
+  array is a reset. The queue panel reads `player.queueModel` (`QueueModel::sync` diffs each edit
+  into a move, removal or insertion); the sidebar syncs its `ListModel` by uuid.
+- **Context menu rows are `IconMenuItem`**, with a `VectorIcon` name, not an emoji in the label.
 
 ## Misc
 

@@ -28,12 +28,20 @@ Rectangle {
 
     onTrackIdChanged: if (trackId > 0) loadRadio()
 
+    // "failed" or "empty" once a reply has landed with nothing to show.
+    property string loadState: ""
+
     function loadRadio() {
         loading = true
+        loadState = ""
         tracks  = []
+        var id = trackId
         bridge.fetchTrackRadio(trackId, function(t, err) {
+            if (id !== root.trackId) return
             loading = false
-            if (!err) tracks = t
+            if (err) { root.loadState = "failed"; return }
+            tracks = t
+            if (t.length === 0) root.loadState = "empty"
         })
     }
 
@@ -114,6 +122,32 @@ Rectangle {
                 trackData:   modelData
                 onPlayRequested: root.playFrom(root.tracks, index)
             }
+        }
+    }
+
+    ColumnLayout {
+        objectName: "radioFailure"
+        visible: root.loadState.length > 0 && !root.loading
+        anchors.centerIn: parent
+        spacing: 12
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: root.loadState === "failed" ? "Couldn't load this radio" : "No radio for this track"
+            color: Theme.textPrimary; font.pixelSize: 18; font.bold: true
+        }
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: root.loadState === "failed" ? "Check your connection and try again."
+                                              : "Tidal has no station built from it."
+            color: Theme.textSec; font.pixelSize: 13
+        }
+        PillButton {
+            objectName: "radioRetry"
+            visible: root.loadState === "failed"
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: 8
+            text: "Retry"; accent: true
+            onClicked: root.loadRadio()
         }
     }
 

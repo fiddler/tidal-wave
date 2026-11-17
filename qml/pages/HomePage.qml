@@ -52,9 +52,69 @@ Rectangle {
 
     Component.onCompleted: loadContent()
 
-    function loadContent() {
-        loading = true
+    // This page sits in a Loader that is never torn down, so rows filled once
+    // at login stayed frozen: an album saved from its own page was missing here
+    // until the next launch. Rebuilt from the bridge's in-memory copy, the same
+    // source Collection reads. Debounced, because each kind emits per page
+    // while its favourites load.
+    Connections {
+        target: bridge
+        function onFavoriteAlbumsChanged()    { cacheRefresh.restart() }
+        function onFavoriteArtistsChanged()   { cacheRefresh.restart() }
+        function onFavoritePlaylistsChanged() { cacheRefresh.restart() }
+        function onFavoriteMixesChanged()     { mixRefresh.restart() }
+    }
+    Timer { id: cacheRefresh; interval: 300; onTriggered: root.refreshFromCache() }
+    Timer { id: mixRefresh;   interval: 300; onTriggered: root.loadMixes() }
+
+    function albumCards(albums) {
+        var items = []
+        for (var i = 0; i < Math.min(albums.length, 12); i++) {
+            var a = albums[i]
+            // A just-saved album is a stub until its details arrive.
+            if (!a.title) continue
+            items.push({ id: a.id, title: a.title, subtitle: a.artists,
+                         coverUrl: a.coverUrl, artistId: a.artistId || 0,
+                         type: "album" })
+        }
+        return items
+    }
+    function playlistCards(lists) {
+        var items = []
+        for (var i = 0; i < Math.min(lists.length, 12); i++) {
+            var p = lists[i]
+            items.push({ id: p.uuid, title: p.title, subtitle: p.numTracks + " tracks",
+                         coverUrl: p.coverUrl, type: "playlist", playlistType: p.type || "" })
+        }
+        return items
+    }
+    function artistCards(artistList) {
+        var items = []
+        for (var i = 0; i < Math.min(artistList.length, 12); i++) {
+            var a = artistList[i]
+            if (!a.name) continue
+            items.push({ id: a.id, title: a.name, subtitle: "Artist",
+                         coverUrl: a.coverUrl || "", type: "artist" })
+        }
+        return items
+    }
+
+    // An empty cache is "not loaded yet", not "nothing saved": leave the rows
+    // the page fetched for itself alone until the bridge has something.
+    function refreshFromCache() {
+        var albums = bridge.searchFavoriteAlbums("")
+        if (albums.length > 0) recentAlbums = albumCards(albums)
+        var lists = bridge.getUserPlaylists()
+        if (lists.length > 0) playlists = playlistCards(lists)
+        var artistList = bridge.searchFavoriteArtists("")
+        if (artistList.length > 0) artists = artistCards(artistList)
+    }
+
+    property int _mixGen: 0
+    function loadMixes() {
+        var gen = ++_mixGen
         bridge.fetchHomeMixes(function(mixList, err) {
+            if (gen !== root._mixGen) return
             loading = false
             if (err.length > 0) return
             var items = []
@@ -65,39 +125,25 @@ Rectangle {
             }
             mixes = items
         })
+    }
+
+    function loadContent() {
+        loading = true
+        loadMixes()
 
         bridge.fetchFavoriteAlbums(function(albums, err) {
             if (err.length > 0) return
-            var items = []
-            for (var i = 0; i < Math.min(albums.length, 12); i++) {
-                var a = albums[i]
-                items.push({ id: a.id, title: a.title, subtitle: a.artists,
-                             coverUrl: a.coverUrl, artistId: a.artistId || 0,
-                             type: "album" })
-            }
-            recentAlbums = items
+            recentAlbums = albumCards(albums)
         }, 12, 0)
 
         bridge.fetchUserPlaylists(function(lists, err) {
             if (err.length > 0) return
-            var items = []
-            for (var i = 0; i < Math.min(lists.length, 12); i++) {
-                var p = lists[i]
-                items.push({ id: p.uuid, title: p.title, subtitle: p.numTracks + " tracks",
-                             coverUrl: p.coverUrl, type: "playlist", playlistType: p.type || "" })
-            }
-            playlists = items
+            playlists = playlistCards(lists)
         }, 12, 0)
 
         bridge.fetchFavoriteArtists(function(artistList, err) {
             if (err.length > 0) return
-            var items = []
-            for (var i = 0; i < Math.min(artistList.length, 12); i++) {
-                var a = artistList[i]
-                items.push({ id: a.id, title: a.name, subtitle: "Artist",
-                             coverUrl: a.coverUrl || "", type: "artist" })
-            }
-            artists = items
+            artists = artistCards(artistList)
         }, 12, 0)
 
         updateRecentlyPlayed()

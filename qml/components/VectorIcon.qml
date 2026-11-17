@@ -119,6 +119,16 @@ Item {
             return "M 7 4 V 20 M 3 8 L 7 4 L 11 8 M 17 20 V 4 M 13 16 L 17 20 L 21 16"
         case "cast":
             return "M 3 12 V 5 H 21 V 18 H 11 M 3 15 A 4 4 0 0 1 7 19 M 3 18 A 1 1 0 0 1 4 19"
+        case "radio":
+            return "M 12 14 A 2 2 0 1 0 12 10 A 2 2 0 0 0 12 14 Z M 16.24 7.76 A 6 6 0 0 1 16.24 16.24 M 7.76 16.24 A 6 6 0 0 1 7.76 7.76 M 19.07 4.93 A 10 10 0 0 1 19.07 19.07 M 4.93 19.07 A 10 10 0 0 1 4.93 4.93"
+        case "disc":
+            return "M 12 2 A 10 10 0 1 0 12 22 A 10 10 0 1 0 12 2 Z M 12 15 A 3 3 0 1 0 12 9 A 3 3 0 0 0 12 15 Z"
+        case "info":
+            return "M 12 2 A 10 10 0 1 0 12 22 A 10 10 0 1 0 12 2 Z M 12 16 V 12 M 12 8 H 12.01"
+        case "link":
+            return "M 10 13 A 5 5 0 0 0 17.54 13.54 L 20.54 10.54 A 5 5 0 0 0 13.47 3.47 L 11.75 5.18 M 14 11 A 5 5 0 0 0 6.46 10.46 L 3.46 13.46 A 5 5 0 0 0 10.53 20.53 L 12.24 18.82"
+        case "ban":
+            return "M 12 2 A 10 10 0 1 0 12 22 A 10 10 0 1 0 12 2 Z M 4.93 4.93 L 19.07 19.07"
         case "eq-sliders":
             // Three vertical faders with offset knobs (feather "sliders").
             return "M 4 21 V 14 M 4 10 V 3 M 12 21 V 12 M 12 8 V 3 M 20 21 V 16 M 20 12 V 3 M 1 14 H 7 M 9 8 H 15 M 17 16 H 23"

@@ -88,7 +88,7 @@ Item {
             NumberAnimation {
                 id: railAnim
                 target: hlist; property: "contentX"
-                duration: 260; easing.type: Easing.OutCubic
+                duration: Theme.dur(260); easing.type: Easing.OutCubic
             }
 
             // Wheel and drag land where they land; the arrows move a screenful
@@ -210,7 +210,7 @@ Item {
                 border.color: Theme.border
                 visible: opacity > 0
                 opacity: (rowHovered && canScroll) ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: 120 } }
+                Behavior on opacity { NumberAnimation { duration: Theme.dur(120) } }
 
                 VectorIcon {
                     anchors.centerIn: parent

@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include "MpvAudio.h"
+#include "QueueModel.h"
 #include <QVariantMap>
 #include <QVariantList>
 #include <QTemporaryFile>
@@ -29,6 +30,8 @@ class Player : public QObject {
     Q_PROPERTY(int        queueCount      READ queueCount      NOTIFY queueChanged)
     Q_PROPERTY(int        queueIndex      READ queueIndex      NOTIFY queueChanged)
     Q_PROPERTY(QVariantList queueTracks   READ queueTracks     NOTIFY queueChanged)
+    // The queue in play order for the queue panel. Roles: track, queueIndex.
+    Q_PROPERTY(QueueModel *queueModel READ queueModel CONSTANT)
     Q_PROPERTY(QVariantList recentlyPlayed READ recentlyPlayed NOTIFY recentlyPlayedChanged)
     // "Playing from" context — where the current queue was started from.
     Q_PROPERTY(QString sourceType READ sourceType NOTIFY sourceChanged)
@@ -144,7 +147,11 @@ private slots:
     void onPlaybackStateChanged(MpvAudio::State state);
     void onErrorOccurred(const QString &msg);
 
+    QueueModel *queueModel() const { return m_queueModel; }
+
 private:
+    void syncQueueModel();
+    QueueModel *m_queueModel = nullptr;
     void handleUserIdChanged(qint64 uid);
     void restoreSession(qint64 uid);
     // startMs > 0 resumes a restored session: the offset is applied once the
@@ -209,7 +216,14 @@ private:
     std::shared_ptr<DashStream> m_activeStream;
 
     // Preload state for the next queued track
-    int                  m_preloadIndex    = -1;
+    // The preload is remembered by track, not by queue position: play-next,
+    // remove, reorder and shuffle all change which track sits at an index, and
+    // a preload matched on the index then played the old audio under the new
+    // track's title. Keyed on the id it also survives a reorder.
+    qlonglong            m_preloadTrackId  = 0;
+    // A track whose preload could not start. Without it the position tick
+    // retried a doomed preload several times a second for the last 10 seconds.
+    qlonglong            m_preloadFailedId = 0;
     bool                 m_preloadReady    = false;
     QString              m_preloadQuality;
     QTemporaryFile      *m_preloadTempFile = nullptr;

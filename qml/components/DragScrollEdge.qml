@@ -73,7 +73,7 @@ Item {
         anchors.fill: parent
         visible: root.armed
         opacity: sensor.containsDrag ? 1 : 0.55
-        Behavior on opacity { NumberAnimation { duration: 120 } }
+        Behavior on opacity { NumberAnimation { duration: Theme.dur(120) } }
         gradient: Gradient {
             GradientStop {
                 position: 0

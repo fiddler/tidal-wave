@@ -15,6 +15,15 @@ Rectangle {
     readonly property bool isLocalTrack: !!(track && track.localPath)
     property bool isLiked: false
     property bool showLyrics: false
+    // Lyrics set large across the whole page, for reading from across the
+    // room. Only exists while the lyrics pane is open.
+    property bool readingView: false
+    onShowLyricsChanged: if (!showLyrics) readingView = false
+    onReadingViewChanged: Qt.callLater(function() {
+        if (root.currentLyricLine >= 0)
+            lyricsView.positionViewAtIndex(root.currentLyricLine, ListView.Center)
+    })
+    readonly property bool multiArtist: hasTrack && !!track.artistList && track.artistList.length > 1
     // Download state for the current track: "idle" | "busy" | "done" | "error"
     property string dlState: "idle"
 
@@ -199,8 +208,10 @@ Rectangle {
 
             Item {
                 id: coverBox
-                Layout.preferredWidth: Math.min(parent.width * 0.45, 420)
-                Layout.preferredHeight: Layout.preferredWidth
+                Layout.preferredWidth: root.readingView ? parent.width : Math.min(parent.width * 0.45, 420)
+                Layout.preferredHeight: root.readingView ? parent.height : Layout.preferredWidth
+                Layout.fillWidth: root.readingView
+                Layout.fillHeight: root.readingView
                 Layout.alignment: Qt.AlignVCenter
 
                 // Album art
@@ -227,7 +238,7 @@ Rectangle {
                     ListView {
                         id: lyricsView
                         anchors.fill: parent
-                        anchors.margins: 16
+                        anchors.margins: root.readingView ? 48 : 16
                         clip: true
                         model: root.lyricsData
                         spacing: 8
@@ -244,13 +255,14 @@ Rectangle {
                             width: lyricsView.width
                             text: modelData.text
                             color: active ? Theme.accent : (hovered ? Theme.textPrimary : Theme.textSec)
-                            font.pixelSize: 14
+                            font.pixelSize: root.readingView ? 30 : 14
                             font.bold: active
+                            horizontalAlignment: root.readingView ? Text.AlignHCenter : Text.AlignLeft
                             opacity: active ? 1.0 : (hovered ? 0.85 : 0.55)
-                            lineHeight: 1.6
+                            lineHeight: root.readingView ? 1.35 : 1.6
                             wrapMode: Text.WordWrap
-                            Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                            Behavior on color   { ColorAnimation  { duration: 180 } }
+                            Behavior on opacity { NumberAnimation { duration: Theme.dur(180); easing.type: Easing.OutCubic } }
+                            Behavior on color   { ColorAnimation  { duration: Theme.dur(180) } }
 
                             HoverHandler {
                                 id: hoverHandler
@@ -312,8 +324,41 @@ Rectangle {
                     }
                 }
 
+                // In the reading view the title block is hidden, so the pane
+                // says what is playing.
+                Text {
+                    visible: root.readingView
+                    anchors { top: parent.top; left: parent.left; right: parent.right; margins: 14 }
+                    text: hasTrack ? track.title + " — " + track.artists : ""
+                    color: Theme.textDim; font.pixelSize: 13
+                    elide: Text.ElideRight
+                }
+
+                Rectangle {
+                    id: readingToggle
+                    objectName: "readingViewToggle"
+                    visible: root.showLyrics && root.lyricsState === "ready"
+                    anchors.bottom: parent.bottom
+                    anchors.right: lyricsToggle.left
+                    anchors.bottomMargin: 10
+                    anchors.rightMargin: 8
+                    width: readingToggleText.implicitWidth + 16
+                    height: 26; radius: 13
+                    color: root.readingView ? Theme.accent : Qt.rgba(0,0,0,0.5)
+                    border.color: root.readingView ? "transparent" : Qt.rgba(1,1,1,0.3)
+                    Text {
+                        id: readingToggleText
+                        anchors.centerIn: parent
+                        text: root.readingView ? "Exit reading view" : "Reading view"
+                        color: "white"; font.pixelSize: 11; font.bold: true
+                    }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: root.readingView = !root.readingView }
+                }
+
                 // Lyrics toggle button — hidden when lyrics confirmed unavailable
                 Rectangle {
+                    id: lyricsToggle
                     visible: root.lyricsState !== "unavailable"
                     anchors.bottom: parent.bottom
                     anchors.right: parent.right
@@ -339,6 +384,7 @@ Rectangle {
             }
 
             ColumnLayout {
+                visible: !root.readingView
                 Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter; spacing: 24
 
                 RowLayout {
@@ -369,8 +415,20 @@ Rectangle {
                             text: hasTrack ? track.title : "—"; color: Theme.textPrimary
                             font.pixelSize: 32; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true
                         }
+                        // Several artists: each name its own link.
+                        ArtistLinks {
+                            visible: root.multiArtist
+                            Layout.fillWidth: true
+                            artists: root.multiArtist ? track.artistList : []
+                            fallbackText: hasTrack ? track.artists : ""
+                            color: Theme.accent
+                            keyboardFocus: true
+                            hoverColor: Theme.accent
+                            pixelSize: 18
+                        }
                         Text {
                             id: artistLink
+                            visible: !root.multiArtist
                             text: hasTrack ? track.artists : ""; color: Theme.accent; font.pixelSize: 18
                             font.underline: artistLinkHov.hovered && hasTrack && Number(track.artistId) > 0
                             activeFocusOnTab: hasTrack && Number(track.artistId) > 0
@@ -403,6 +461,28 @@ Rectangle {
                             MouseArea {
                                 anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                 onClicked: if (hasTrack && Number(track.albumId) > 0) navigateTo("album", { albumId: Number(track.albumId) })
+                            }
+                        }
+                        Text {
+                            id: creditsLink
+                            objectName: "creditsLink"
+                            visible: root.hasTrack && !root.isLocalTrack
+                            text: "Credits"
+                            color: creditsHov.hovered ? Theme.textPrimary : Theme.textDim
+                            font.pixelSize: 12
+                            font.underline: creditsHov.hovered
+                            activeFocusOnTab: visible
+                            Keys.onReturnPressed: Window.window.showCredits(root.track)
+                            Keys.onSpacePressed:  Window.window.showCredits(root.track)
+                            Rectangle {
+                                anchors.fill: parent; anchors.margins: -4; radius: 4; color: "transparent"
+                                border.width: creditsLink.activeFocus ? 2 : 0
+                                border.color: Theme.accent
+                            }
+                            HoverHandler { id: creditsHov; cursorShape: Qt.PointingHandCursor }
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: Window.window.showCredits(root.track)
                             }
                         }
                     }
@@ -466,11 +546,10 @@ Rectangle {
                         active: root.isLiked
                         onClicked: {
                             var trackId = root.track.id
-                            if (root.isLiked) {
-                                bridge.removeTrackFavorite(trackId, function(success) {})
-                            } else {
-                                bridge.addTrackFavorite(trackId, function(success) {})
-                            }
+                            var w = root.Window.window
+                            var failed = function(ok) { if (!ok) w.favoriteFailed("Liked Songs") }
+                            if (root.isLiked) bridge.removeTrackFavorite(trackId, failed)
+                            else              bridge.addTrackFavorite(trackId, failed)
                         }
                     }
                 }
@@ -811,7 +890,7 @@ Rectangle {
                                     height: 16
                                     radius: 8
                                     color: "white"
-                                    Behavior on x { NumberAnimation { duration: 150 } }
+                                    Behavior on x { NumberAnimation { duration: Theme.dur(150) } }
                                 }
                             }
                             
@@ -863,7 +942,7 @@ Rectangle {
                             height: 32
                             strokeWidth: 1.5
                         }
-                        scale: pHov.hovered ? 0.95 : 1; Behavior on scale { NumberAnimation { duration: 100 } }
+                        scale: pHov.hovered ? 0.95 : 1; Behavior on scale { NumberAnimation { duration: Theme.dur(100) } }
                         HoverHandler { id: pHov; cursorShape: Qt.PointingHandCursor }
                         TapHandler   { onTapped: player.playPause() }
                     }

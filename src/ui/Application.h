@@ -20,11 +20,20 @@ class MacNowPlaying;
 class Application : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool reallyQuit READ reallyQuit NOTIFY reallyQuitChanged)
+    // A fixed-pitch family that is installed. QML must not name a generic
+    // like "monospace": macOS resolves no such family, and the first family
+    // that fails to resolve costs a font-alias scan at launch.
+    Q_PROPERTY(QString monospaceFamily READ monospaceFamily CONSTANT)
+    // Follows the system "reduce motion" setting. Theme reads it to switch
+    // off decorative animation.
+    Q_PROPERTY(bool reducedMotion READ reducedMotion CONSTANT)
 public:
     explicit Application(QObject *parent = nullptr);
     int run(int argc, char **argv);
 
     bool reallyQuit() const { return m_reallyQuit; }
+    QString monospaceFamily() const;
+    bool reducedMotion() const;
     Q_INVOKABLE void quit();
 
     // ── Last viewed page ────────────────────────────────────────────────

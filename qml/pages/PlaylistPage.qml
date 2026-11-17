@@ -232,7 +232,7 @@ Rectangle {
                         smooth: true
                         mipmap: true
                         opacity: status === Image.Ready ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                        Behavior on opacity { NumberAnimation { duration: Theme.dur(200) } }
                     }
                     Grid {
                         id: collageGrid
@@ -345,11 +345,7 @@ Rectangle {
                             text: "Edit"
                             glyph: "✎"
                             accent: false
-                            onClicked: {
-                                editTitleField.text   = root.playlistTitle
-                                editDescField.text    = root.playlistDescription
-                                editPlaylistPopup.open()
-                            }
+                            onClicked: editPlaylistPopup.begin()
                         }
 
                         // Offline pin — the button doubles as the state
@@ -480,13 +476,73 @@ Rectangle {
     // Edit playlist popup
     Popup {
         id: editPlaylistPopup
+        objectName: "editPlaylistPopup"
         anchors.centerIn: Overlay.overlay
         width: 400
         modal: true
         focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // No dismissing mid-save: the answer has to land somewhere.
+        closePolicy: saving ? Popup.NoAutoClose : (Popup.CloseOnEscape | Popup.CloseOnPressOutside)
         padding: 20
         background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 12 }
+
+        property bool   saving: false
+        property string error: ""
+        onAboutToShow: { saving = false; error = "" }
+
+        // The sidebar and Home open a playlist without its description, and a
+        // save sends both fields: an empty box would wipe the one on the
+        // server. So the box is filled from the server before Save works.
+        property bool metaReady: true
+        property int  _metaGen: 0
+        function begin() {
+            editTitleField.text = root.playlistTitle
+            editDescField.text  = root.playlistDescription
+            metaReady = false
+            open()
+            loadMeta()
+        }
+        function loadMeta() {
+            var gen = ++_metaGen
+            var uuid = root.playlistUuid
+            error = ""
+            bridge.fetchPlaylistMeta(uuid, function(p, err) {
+                if (gen !== editPlaylistPopup._metaGen || uuid !== root.playlistUuid) return
+                if (err && err.length > 0) {
+                    editPlaylistPopup.error = "Couldn't load the current description. Close and try again."
+                    return
+                }
+                root.playlistDescription = p.description || ""
+                editDescField.text = root.playlistDescription
+                editPlaylistPopup.metaReady = true
+            })
+        }
+
+        // The page's title and description change on the server's yes and not
+        // before. This popup used to write them locally and stop, so a rename
+        // was lost the moment you navigated away.
+        function save() {
+            if (saving || !metaReady) return
+            var newTitle = editTitleField.text.trim().substring(0, 100)
+            var newDesc  = editDescField.text.trim()
+            if (newTitle.length === 0) { error = "A playlist needs a title."; return }
+            if (newTitle === root.playlistTitle && newDesc === root.playlistDescription) { close(); return }
+            saving = true
+            error = ""
+            var uuid = root.playlistUuid
+            bridge.editPlaylist(uuid, newTitle, newDesc, function(ok) {
+                editPlaylistPopup.saving = false
+                if (!ok) {
+                    editPlaylistPopup.error = "Couldn't save. Check your connection and try again."
+                    return
+                }
+                if (uuid === root.playlistUuid) {
+                    root.playlistTitle = newTitle
+                    root.playlistDescription = newDesc
+                }
+                editPlaylistPopup.close()
+            })
+        }
 
         Column {
             width: parent.width
@@ -502,9 +558,12 @@ Rectangle {
                 color: Theme.surface; border.color: titleFocus.activeFocus ? Theme.accent : Theme.border
                 TextInput {
                     id: editTitleField
+                    objectName: "editPlaylistTitle"
                     anchors.fill: parent; anchors.margins: 8
                     color: Theme.textPrimary; font.pixelSize: 14
                     selectionColor: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.4)
+                    maximumLength: 100
+                    Keys.onReturnPressed: editPlaylistPopup.save()
                     FocusScope { id: titleFocus; anchors.fill: parent }
                 }
             }
@@ -515,28 +574,37 @@ Rectangle {
                 color: Theme.surface; border.color: descFocus.activeFocus ? Theme.accent : Theme.border
                 TextEdit {
                     id: editDescField
+                    objectName: "editPlaylistDescription"
                     anchors.fill: parent; anchors.margins: 8
                     color: Theme.textPrimary; font.pixelSize: 14
                     wrapMode: TextEdit.WordWrap
+                    readOnly: !editPlaylistPopup.metaReady
                     selectionColor: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.4)
                     FocusScope { id: descFocus; anchors.fill: parent }
                 }
+            }
+
+            Text {
+                objectName: "editPlaylistError"
+                visible: editPlaylistPopup.error.length > 0
+                width: parent.width
+                text: editPlaylistPopup.error
+                color: Theme.red; font.pixelSize: 12
+                wrapMode: Text.WordWrap
             }
 
             Row {
                 spacing: 10; anchors.right: parent.right
                 PillButton {
                     text: "Cancel"; accent: false
-                    onClicked: editPlaylistPopup.close()
+                    opacity: editPlaylistPopup.saving ? 0.5 : 1
+                    onClicked: if (!editPlaylistPopup.saving) editPlaylistPopup.close()
                 }
                 PillButton {
-                    text: "Save"; accent: true
-                    onClicked: {
-                        var newTitle = editTitleField.text.trim()
-                        if (newTitle.length > 0) root.playlistTitle = newTitle
-                        root.playlistDescription = editDescField.text.trim()
-                        editPlaylistPopup.close()
-                    }
+                    objectName: "editPlaylistSave"
+                    text: editPlaylistPopup.saving ? "Saving…" : "Save"; accent: true
+                    opacity: editPlaylistPopup.metaReady ? 1 : 0.5
+                    onClicked: editPlaylistPopup.save()
                 }
             }
         }

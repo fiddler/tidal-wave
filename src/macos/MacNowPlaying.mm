@@ -213,3 +213,7 @@ void MacNowPlaying::fetchArtwork(const QString &url) {
         [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = g_info;
     });
 }
+
+bool macReduceMotion() {
+    return [[NSWorkspace sharedWorkspace] accessibilityDisplayShouldReduceMotion];
+}

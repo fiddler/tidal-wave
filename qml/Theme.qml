@@ -19,4 +19,11 @@ QtObject {
     readonly property color green:       "#1DB954"
     readonly property int   radius:      8
     readonly property int   radiusLg:    12
+
+    // The system "reduce motion" setting, copied in by Main.qml at startup: a
+    // singleton cannot see the `app` context property itself. Every finite
+    // animation takes its duration through dur(), so one switch turns them into
+    // jumps. Spinners keep turning: they report progress, they do not decorate.
+    property bool reducedMotion: false
+    function dur(ms) { return reducedMotion ? 0 : ms }
 }

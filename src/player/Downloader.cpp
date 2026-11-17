@@ -19,7 +19,20 @@
 Downloader::Downloader(TidalClient *client, QObject *parent)
     : QObject(parent), m_client(client)
 {
-    m_ffmpegPath = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+}
+
+// Looked up per download, not once at startup: an app started from Finder or a
+// desktop entry inherits a four-directory PATH that holds no Homebrew, so the
+// usual install locations are tried as well, and installing ffmpeg takes effect
+// without restarting the app.
+QString Downloader::resolveFfmpeg() {
+    const QString name = QStringLiteral("ffmpeg");
+    QString path = QStandardPaths::findExecutable(name);
+    if (path.isEmpty())
+        path = QStandardPaths::findExecutable(name, {
+            QStringLiteral("/opt/homebrew/bin"), QStringLiteral("/usr/local/bin"),
+            QStringLiteral("/opt/local/bin"),    QStringLiteral("/usr/bin") });
+    return path;
 }
 
 Downloader::~Downloader() {
@@ -51,8 +64,9 @@ void Downloader::downloadTrack(const QVariantMap &track) {
     if (id <= 0) return;
     if (m_jobs.contains(id)) return;   // already downloading this track
 
+    m_ffmpegPath = resolveFfmpeg();
     if (m_ffmpegPath.isEmpty()) {
-        emit downloadError(id, QStringLiteral("ffmpeg was not found on PATH — install ffmpeg to enable downloads."));
+        emit downloadError(id, QStringLiteral("ffmpeg was not found — install ffmpeg to enable downloads."));
         return;
     }
 

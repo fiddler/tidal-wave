@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import TidalWave
+import "NavStack.js" as NavStack
 
 ApplicationWindow {
     id: root
@@ -24,12 +25,21 @@ ApplicationWindow {
         }
     }
 
+    Component.onCompleted: Theme.reducedMotion = app.reducedMotion
+
     property string currentPage: "home"
     property var    pageParams:  ({})
     property bool   queueOpen:   false
 
-    property string previousPage: "home"
-    property var    previousPageParams: ({})
+    // The pages behind the current one, oldest first, as {page, params}. Back
+    // pops it. A single "previous page" slot made back an ordinary forward
+    // step, so two detail pages bounced between each other for ever.
+    property var    navHistory: []
+    readonly property int navHistoryMax: 32
+    readonly property string previousPage: navHistory.length > 0
+                                           ? navHistory[navHistory.length - 1].page : "home"
+    readonly property var    previousPageParams: navHistory.length > 0
+                                           ? navHistory[navHistory.length - 1].params : ({})
     property var    _currentNavParams: ({})
 
     // ─── Sleep Timer Core State & Logic ──────────────────
@@ -202,12 +212,14 @@ ApplicationWindow {
     // don't need — or want — a back affordance.
     readonly property var detailPages: ["album", "artist", "playlist", "mix", "nowplaying", "radio", "localplaylist"]
 
-    function navigate(page, params) {
+    // `isBack` is passed by goBack() alone: a pop must not push.
+    function navigate(page, params, isBack) {
         var p = params || {}
-        if (page !== currentPage) {
-            previousPage = currentPage
-            previousPageParams = _currentNavParams
-        }
+        if (!isBack)
+            navHistory = NavStack.forward(navHistory,
+                                          { page: currentPage, params: _currentNavParams },
+                                          { page: page, params: p },
+                                          detailPages, navHistoryMax)
         _currentNavParams = p
         
         var targetLoader = getLoader(page)
@@ -237,6 +249,10 @@ ApplicationWindow {
         currentPage = page
         if (page === "search") {
             searchLoader.forceActiveFocus()
+            // Focusing the Loader is not focusing the field: ask the page to
+            // put the cursor in it.
+            if (searchLoader.item && typeof searchLoader.item.focusSearch === "function")
+                searchLoader.item.focusSearch()
         } else {
             focusStealer.forceActiveFocus()
         }
@@ -291,7 +307,30 @@ ApplicationWindow {
     }
 
     function goBack() {
-        navigate(previousPage, previousPageParams)
+        if (navHistory.length === 0) { navigate("home", {}, true); return }
+        var top = navHistory[navHistory.length - 1]
+        navHistory = navHistory.slice(0, -1)
+        navigate(top.page, top.params, true)
+    }
+
+    // A refused like, save or follow leaves the screen exactly as it was,
+    // which cannot be told from a click that missed. Say so.
+    function favoriteFailed(what) { warn("Couldn't update " + what + ". Check your connection.") }
+
+    function showCredits(track) { creditsDialog.openFor(track) }
+
+    // A track's radio is a mix with an id, carried on the track as trackMixId.
+    // Opened as one it can be saved; the bare tracks/<id>/radio list has no
+    // identity, and is only the fallback when the track names no station.
+    function openTrackRadio(track) {
+        if (!track) return
+        var open = function(mixId) {
+            if (mixId) navigate("mix", { mixId: mixId, title: track.title + " Radio",
+                                         subtitle: "", coverUrl: "" })
+            else       navigate("radio", { trackId: track.id, radioTitle: track.title })
+        }
+        if (track.trackMixId) open(track.trackMixId)
+        else                  bridge.fetchTrackMix(track.id, open)
     }
 
     // Returns to the page that was open when the app last closed, so a restart
@@ -315,10 +354,10 @@ ApplicationWindow {
         // Put the stored back target in place of the one navigate() computed
         // from this session's empty history, then write it back, or the back
         // button on the restored page goes nowhere.
-        if (prev && getLoader(prev)) {
-            previousPage = prev
-            try { previousPageParams = JSON.parse(prevJson || "{}") }
-            catch (e) { previousPageParams = {} }
+        if (prev && getLoader(prev) && detailPages.indexOf(page) !== -1) {
+            var prevParams = {}
+            try { prevParams = JSON.parse(prevJson || "{}") } catch (e) { prevParams = {} }
+            navHistory = [{ page: prev, params: prevParams }]
             app.saveNavState(page, JSON.stringify(params),
                              previousPage, JSON.stringify(previousPageParams))
         }
@@ -429,6 +468,7 @@ ApplicationWindow {
             // open on top of it. Every popup listed here already has
             // CloseOnEscape; the shortcut was simply taking the key first.
             enabled: auth.state === 2 && !commandPalette.opened && !sideBar.popupOpen
+                     && !creditsDialog.opened
             onActivated: {
                 var sel = root.currentSelection()
                 if (sel && sel.hasSelection) sel.clear()
@@ -595,6 +635,8 @@ ApplicationWindow {
         id: commandPalette
         host: root
     }
+
+    CreditsDialog { id: creditsDialog }
 
     // Window-wide import target: drop audio files or folders anywhere to add
     // them to the local library. Dropping onto an open local playlist adds them

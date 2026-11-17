@@ -37,3 +37,6 @@ private:
     QString                m_artUrl;       // URL of the artwork now published
     qint64                 m_lastPosition = 0;
 };
+
+// System Settings > Accessibility > Display > Reduce motion.
+bool macReduceMotion();

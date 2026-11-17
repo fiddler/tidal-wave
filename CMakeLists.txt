@@ -47,6 +47,7 @@ set(SOURCES
     src/api/TidalClient.cpp
     src/api/TidalBridge.cpp
     src/player/Player.cpp
+    src/player/QueueModel.cpp
     src/player/Equalizer.cpp
     src/player/MpvAudio.cpp
     src/player/PlaybackDiagnostics.cpp
@@ -68,6 +69,7 @@ set(HEADERS
     src/api/TidalClient.h
     src/api/TidalBridge.h
     src/player/Player.h
+    src/player/QueueModel.h
     src/player/Equalizer.h
     src/player/MpvAudio.h
     src/player/PlaybackDiagnostics.h
@@ -137,9 +139,13 @@ qt_add_qml_module(tidal-wave
     QML_FILES
         qml/Theme.qml
         qml/Main.qml
+        qml/NavStack.js
         qml/components/PlayerBar.qml
         qml/components/SideBar.qml
         qml/components/TrackRow.qml
+        qml/components/ArtistLinks.qml
+        qml/components/IconMenuItem.qml
+        qml/components/CreditsDialog.qml
         qml/components/TrackSelection.qml
         qml/components/DragScrollEdge.qml
         qml/components/ReorderDropArea.qml
@@ -238,6 +244,40 @@ set_target_properties(tidal-wave PROPERTIES
 # tidal-wave name, which is what the .desktop entry and packaging expect.
 if(APPLE)
     set_target_properties(tidal-wave PROPERTIES OUTPUT_NAME "Tidal Wave")
+endif()
+
+# ── Tests ────────────────────────────────────────────────────────────────────
+# `ctest --test-dir build` runs both suites: tst_api feeds fixtures to the
+# response parsers, and the QML suite runs the real pages against fake services.
+option(TIDALWAVE_TESTS "Build the unit tests" ON)
+if(TIDALWAVE_TESTS)
+    find_package(Qt6 QUIET COMPONENTS Test)
+    if(Qt6Test_FOUND)
+        enable_testing()
+        add_executable(tst_api
+            tests/cpp/tst_api.cpp
+            src/api/TidalApi.cpp
+            src/api/TidalClient.cpp
+            src/api/TidalBridge.cpp
+            src/player/QueueModel.cpp
+            src/player/QueueModel.h
+            src/api/TidalApi.h
+            src/api/TidalClient.h
+            src/api/TidalBridge.h
+        )
+        target_include_directories(tst_api PRIVATE src src/api src/player)
+        target_link_libraries(tst_api PRIVATE
+            Qt6::Core Qt6::Gui Qt6::Network Qt6::Qml Qt6::Test)
+        add_test(NAME api COMMAND tst_api)
+
+        find_program(QMLTESTRUNNER_EXE qmltestrunner HINTS "${QT_HOST_PATH}/bin" "/opt/homebrew/bin")
+        find_package(Python3 QUIET COMPONENTS Interpreter)
+        if(QMLTESTRUNNER_EXE AND Python3_FOUND)
+            add_test(NAME qml
+                COMMAND ${CMAKE_COMMAND} -E env "QMLTESTRUNNER=${QMLTESTRUNNER_EXE}"
+                        ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run-qml-tests.py)
+        endif()
+    endif()
 endif()
 
 # ── Self-contained macOS bundle ──────────────────────────────────────────────

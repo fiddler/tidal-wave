@@ -17,6 +17,9 @@
 Player::Player(TidalClient *client, QObject *parent)
     : QObject(parent), m_client(client)
 {
+    m_queueModel = new QueueModel(this);
+    // queueChanged covers every edit and the shuffle toggle.
+    connect(this, &Player::queueChanged, this, &Player::syncQueueModel);
     connect(m_client, &TidalClient::userIdChanged, this, &Player::handleUserIdChanged);
     if (m_client->userId() > 0) {
         handleUserIdChanged(m_client->userId());
@@ -269,6 +272,18 @@ QVariantList Player::playbackOrderTracks() const {
     return out;
 }
 
+void Player::syncQueueModel() {
+    QList<QueueModel::Row> rows;
+    rows.reserve(m_queue.size());
+    if (m_shuffle) {
+        for (int idx : m_shuffleOrder)
+            if (idx >= 0 && idx < m_queue.count()) rows.append({ m_queue[idx], idx });
+    } else {
+        for (int i = 0; i < m_queue.count(); ++i) rows.append({ m_queue[i], i });
+    }
+    m_queueModel->sync(rows);
+}
+
 QVariantList Player::recentlyPlayed() const {
     QVariantList out;
     for (const auto &m : m_recentlyPlayed)
@@ -428,6 +443,9 @@ void Player::loadAndPlay(int index, qint64 startMs) {
     // fetched. startMs is applied in onMediaStatusChanged once the media is
     // ready, and reported by position() until then.
     m_sessionRestored   = false;
+    // A failed preload is skipped only for the track that was playing when it
+    // failed. A new track starting is a new attempt.
+    m_preloadFailedId   = 0;
     m_pendingSeekMs     = qMax(0LL, startMs);
     m_lastSavedPosition = m_pendingSeekMs;
 
@@ -554,12 +572,13 @@ void Player::loadAndPlay(int index, qint64 startMs) {
         }
     }
 
-    // Use preloaded file if it's ready for this exact index
-    if (m_preloadIndex == index && m_preloadReady && m_preloadTempFile) {
+    // Use the preloaded file if it is ready and is this exact track
+    if (m_preloadTrackId != 0 && m_preloadTrackId == m_currentTrack.id
+        && m_preloadReady && m_preloadTempFile) {
         m_mpdTempFile     = m_preloadTempFile;
         m_preloadTempFile = nullptr;
         m_streamedQuality = m_preloadQuality;
-        m_preloadIndex    = -1;
+        m_preloadTrackId  = 0;
         m_preloadReady    = false;
         m_preloadQuality  = {};
         emit currentTrackChanged();
@@ -697,16 +716,19 @@ void Player::cancelPreload() {
         delete m_preloadTempFile;
         m_preloadTempFile = nullptr;
     }
-    m_preloadIndex   = -1;
+    m_preloadTrackId = 0;
     m_preloadReady   = false;
     m_preloadQuality = {};
 }
 
 void Player::preloadNext() {
     int next = nextIndex();
-    if (next < 0 || next == m_preloadIndex) return;
+    if (next < 0) return;
+    const qlonglong trackId = m_queue[next].value("id").toLongLong();
+    if (trackId == m_preloadTrackId || trackId == m_preloadFailedId) return;
 
     cancelPreload();
+    m_preloadFailedId = 0;
 
     // Local files open instantly and have no manifest — nothing to preload.
     if (!m_queue[next].value("localPath").toString().isEmpty()) return;
@@ -715,19 +737,18 @@ void Player::preloadNext() {
     if (m_offline && !m_offline->localPathFor(m_queue[next].value("id").toLongLong()).isEmpty())
         return;
 
-    m_preloadIndex = next;
+    m_preloadTrackId = trackId;
 
-    qlonglong trackId = m_queue[next].value("id").toLongLong();
-
-    m_client->fetchStreamManifest(trackId, [this, next](StreamManifest manifest, QString err) {
-        if (m_preloadIndex != next || !err.isEmpty()) return;
+    m_client->fetchStreamManifest(trackId, [this, trackId](StreamManifest manifest, QString err) {
+        if (m_preloadTrackId != trackId) return;
+        if (!err.isEmpty()) { m_preloadTrackId = 0; m_preloadFailedId = trackId; return; }
 
         m_preloadQuality = manifest.codec;
 
         if (manifest.type == StreamManifest::BTS) {
-            m_preloadDownload = m_client->fetchRaw(QUrl(manifest.url), [this, next](QByteArray data, QString dlErr) {
+            m_preloadDownload = m_client->fetchRaw(QUrl(manifest.url), [this, trackId](QByteArray data, QString dlErr) {
                 m_preloadDownload = nullptr;
-                if (m_preloadIndex != next || !dlErr.isEmpty() || data.isEmpty()) return;
+                if (m_preloadTrackId != trackId || !dlErr.isEmpty() || data.isEmpty()) return;
                 auto *f = new QTemporaryFile(QDir::tempPath() + QStringLiteral("/tidal-wave-XXXXXX.mp4"));
                 f->setAutoRemove(false);
                 if (f->open()) {
@@ -742,15 +763,16 @@ void Player::preloadNext() {
             auto *fetcher = new DashFetcher(m_client, manifest.url, this);
             if (!fetcher->isValid()) {
                 delete fetcher;
-                m_preloadIndex = -1;
+                m_preloadTrackId  = 0;
+                m_preloadFailedId = trackId;
                 return;
             }
             m_preloadDash = fetcher;
             connect(fetcher, &DashFetcher::finished, this,
-                [this, fetcher, next](QTemporaryFile *file, const QString &) {
+                [this, fetcher, trackId](QTemporaryFile *file, const QString &) {
                     if (m_preloadDash == fetcher) m_preloadDash = nullptr;
                     fetcher->deleteLater();
-                    if (m_preloadIndex != next || !file) {
+                    if (m_preloadTrackId != trackId || !file) {
                         if (file) { file->remove(); delete file; }
                         return;
                     }

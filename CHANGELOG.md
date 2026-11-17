@@ -1,5 +1,64 @@
 # Changelog
 
+## 2026-10-13
+
+Most of this release follows upstream
+[0.4.0](https://github.com/immineal/tidal-wave/releases/tag/v0.4.0) by
+[immineal](https://github.com/immineal). The two trees no longer merge, so each
+item was written again here; the upstream commit that did it first is named in
+brackets. Items without one are this fork's own.
+
+### Added
+
+- Search loads more results as you scroll, one tab at a time, and keeps your
+  recent searches (`5ff0832`).
+- Track credits: who played, wrote and produced, from a track's menu or Now
+  Playing. Lyrics can fill the page in large type (`a8137a8`, `398f283`).
+- A track's radio opens as a mix that can be saved and unsaved. Saved mixes
+  show in Home and the collection (`39b1465`, `024bb82`, `aad211e`).
+- Every credited artist is its own link, on track rows, album headers, the
+  player bar and Now Playing (`d591427`). They take Tab and Return.
+- Artist pages list singles, EPs and compilations beside albums (`7926c18`).
+- Queue rows and sidebar playlists travel to their new place when reordered
+  (`d591427`).
+- Animations stop when macOS "Reduce motion" is on. Read at launch
+  (`5ef177d`).
+- Context menus carry drawn icons instead of emoji (`e972e24`, `125ad11`).
+- The back button walks a history of pages instead of one fixed parent.
+- An album Tidal has delisted says so instead of loading forever.
+
+### Changed
+
+- Saved albums and artists come newest first.
+- Sidebar playlists sort by the later of last played and date saved, so a
+  playlist you have just saved shows at the top.
+- The queue panel updates in place. A track change no longer rebuilds every
+  row or jumps the list to the top (`7bdd1e2`, `b3d8dca`).
+
+### Fixed
+
+- Renaming a playlist reaches the server; it was only changed on screen and
+  lost on the next visit (`5a80bda`). The description is loaded before the
+  save, because the endpoint replaces both fields.
+- Artist, radio and mix pages say when loading failed and offer a retry,
+  instead of showing an empty page (`df5ba7e`).
+- A stream or request that stops answering is given up on after 15 seconds
+  (`3bc0ddc`).
+- Search no longer says "No results" before the answer arrives, and a failed
+  search clears the old results instead of leaving them under the new query
+  (`6cfc474`).
+- A queue edit near the end of a track no longer plays the track that had
+  been preloaded before the edit.
+- Launch no longer spends 74 ms looking for a font that is not installed
+  (`0b93212`).
+- A newly saved album, artist or mix shows on Home without a restart.
+- Downloads find ffmpeg when the app is started from Finder or the Dock.
+
+### Not taken
+
+- Mixes in search results (`5ff0832`). Tidal's search returned no mixes on
+  any query tried on 2026-10-09, so the tab stays hidden unless some arrive.
+
 ## 2026-09-27
 
 ### Added

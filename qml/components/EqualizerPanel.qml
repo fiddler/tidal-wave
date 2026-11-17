@@ -63,7 +63,7 @@ Popup {
                     color: Theme.textPrimary
                     anchors.verticalCenter: parent.verticalCenter
                     x: root.eqOn ? parent.width - width - 3 : 3
-                    Behavior on x { NumberAnimation { duration: 120 } }
+                    Behavior on x { NumberAnimation { duration: Theme.dur(120) } }
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
                 TapHandler   { onTapped: equalizer.enabled = !root.eqOn }

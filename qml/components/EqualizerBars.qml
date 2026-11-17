@@ -29,7 +29,7 @@ Item {
             height: 4 + index * 2
 
             SequentialAnimation on height {
-                running: root.running && root.visible && AppFocus.active
+                running: root.running && root.visible && AppFocus.active && !Theme.reducedMotion
                 loops: Animation.Infinite
                 NumberAnimation {
                     to: 11 - index * 1.5

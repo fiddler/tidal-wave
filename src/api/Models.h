@@ -11,6 +11,13 @@ namespace Tidal {
 enum class AudioQuality { Low96k, Low320k, Lossless, HiResLossless };
 enum class MediaType { Track, Album, Artist, Playlist, Mix };
 
+// The mixType values the app treats differently. Matched on, never the title:
+// titles arrive in the account's language.
+namespace MixTypes {
+inline constexpr auto VideoDailyMix = "VIDEO_DAILY_MIX";
+inline constexpr auto TrackMix      = "TRACK_MIX";
+}
+
 struct Artist {
     qint64 id = 0;
     QString name;
@@ -84,6 +91,10 @@ struct Track {
     // Local tracks carry a negative id so they can never collide with a
     // Tidal track id or be sent to a Tidal endpoint by mistake.
     QString localPath;
+    // The id of this track's radio station as a mix, from `mixes.TRACK_MIX`.
+    // Empty on endpoints that leave `mixes` out; the radio then falls back to
+    // the bare tracks/<id>/radio list, which has no identity and cannot be saved.
+    QString trackMixId;
 
     bool isLocal() const { return !localPath.isEmpty(); }
 
@@ -97,6 +108,7 @@ struct Track {
         t.explicit_    = j["explicit"].toBool();
         t.popularity   = j["popularity"].toInt();
         t.audioQuality = j["audioQuality"].toString();
+        t.trackMixId   = j["mixes"].toObject()[MixTypes::TrackMix].toString();
         // Both flags default to true: a few endpoints omit them, and an absent
         // flag must not grey out a track that plays perfectly well.
         t.available    = j["allowStreaming"].toBool(true) && j["streamReady"].toBool(true);
@@ -140,6 +152,10 @@ struct Playlist {
     QString created;      // ISO timestamps as sent — sort lexicographically
     QString lastUpdated;
     qint64  creatorId = 0;   // 0 for editorial; your uid for playlists you made
+    // When this user created or saved it, ms since epoch, from the collection
+    // row the playlist arrived in. Not `created`: for a saved playlist that is
+    // the author's date and can be years old.
+    qint64  addedAt = 0;
 
     QString coverUrl(int size = 320) const {
         if (image.isEmpty()) return {};
@@ -172,6 +188,15 @@ struct Mix {
     QString title;
     QString subTitle;
     QString cover;  // UUID
+    QString mixType;     // DISCOVERY_MIX / TRACK_MIX / ARTIST_MIX / VIDEO_DAILY_MIX …
+    // When the user saved it, ms since epoch. Only v2/favorites/mixes says;
+    // 0 for a mix that came from a generated feed.
+    qint64  addedAt = 0;
+
+    // The app plays no video, and pages/mix answers these with a VIDEO_LIST.
+    bool isVideoMix() const { return mixType == QLatin1String(MixTypes::VideoDailyMix); }
+    // A track's radio station.
+    bool isTrackMix() const { return mixType == QLatin1String(MixTypes::TrackMix); }
 
     QString coverUrl(int size = 320) const {
         if (cover.isEmpty()) return {};
@@ -186,6 +211,9 @@ struct Mix {
         m.id       = j["id"].toString();
         m.title    = j["title"].toString();
         m.subTitle = j["subTitle"].toString();
+        m.mixType  = j["mixType"].toString();
+        const QDateTime added = QDateTime::fromString(j["dateAdded"].toString(), Qt::ISODate);
+        if (added.isValid()) m.addedAt = added.toMSecsSinceEpoch();
         // Try multiple known image locations in the API response
         auto tryImages = [&](const QJsonObject &imgs) {
             if (m.cover.isEmpty() && imgs.contains("LARGE"))
@@ -197,7 +225,7 @@ struct Mix {
         };
         tryImages(j["images"].toObject());
         tryImages(j["detail"].toObject()["images"].toObject());
-        tryImages(j["mixType"].toObject()["images"].toObject());
+        tryImages(j["detailImages"].toObject());
         return m;
     }
 };
@@ -237,10 +265,39 @@ struct SearchResults {
     QList<Album>    albums;
     QList<Artist>   artists;
     QList<Playlist> playlists;
+    QList<Mix>      mixes;
     int totalTracks    = 0;
     int totalAlbums    = 0;
     int totalArtists   = 0;
     int totalPlaylists = 0;
+    int totalMixes     = 0;
+};
+
+// One role on a recording and the people credited with it.
+struct CreditGroup {
+    QString type;               // "Producer", "Bass Guitar": the label's word
+    QList<Artist> contributors; // the id is 0 when the name is not an artist page
+};
+
+struct TrackCredits {
+    QList<CreditGroup> groups;
+    QString copyright;
+    QString isrc;
+    QString releaseDate;   // the album's, in full
+    QString upc;
+
+    static CreditGroup groupFromJson(const QJsonObject &j) {
+        CreditGroup g;
+        g.type = j["type"].toString();
+        for (const auto &v : j["contributors"].toArray()) {
+            const auto o = v.toObject();
+            Artist a;
+            a.id   = o["id"].toVariant().toLongLong();
+            a.name = o["name"].toString();
+            if (!a.name.isEmpty()) g.contributors.append(a);
+        }
+        return g;
+    }
 };
 
 } // namespace Tidal

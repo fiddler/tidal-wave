@@ -19,8 +19,8 @@ Item {
         border.color: SyncState.failed ? Theme.red : Theme.border
         border.width: 1
 
-        Behavior on width  { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-        Behavior on height { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on width  { NumberAnimation { duration: Theme.dur(160); easing.type: Easing.OutCubic } }
+        Behavior on height { NumberAnimation { duration: Theme.dur(160); easing.type: Easing.OutCubic } }
 
         // ── syncing ──
         Row {

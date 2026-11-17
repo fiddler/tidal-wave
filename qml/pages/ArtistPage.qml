@@ -40,15 +40,27 @@ Rectangle {
         function onFavoriteArtistsChanged() { root.updateFollowState() }
     }
 
+    // Set when the artist itself would not load. The page drew nothing for
+    // that, which a dead network and a broken app share.
+    property string loadError: ""
+    readonly property bool showFailure: loadError.length > 0 && !loading && !artistData.name
+                                        && topTracks.length === 0 && albums.length === 0
+
     function loadArtist() {
         loading = true
+        loadError = ""
+        var id = artistId
         bridge.fetchArtistDetail(artistId, function(d, err) {
+            if (id !== root.artistId) return
             if (!err) artistData = d
+            else root.loadError = "Couldn't load this artist."
         })
         bridge.fetchArtistTopTracks(artistId, function(t, err) {
+            if (id !== root.artistId) return
             if (!err) topTracks = t
         })
         bridge.fetchArtistAlbums(artistId, function(a, err) {
+            if (id !== root.artistId) return
             loading = false
             // Tidal's artist/albums endpoint lists every edition of a release
             // (Standard, Deluxe, Explicit, retailer-exclusives …) as separate ids,
@@ -150,11 +162,10 @@ Rectangle {
                             glyph: root.isFollowing ? "♥" : "♡"
                             accent: root.isFollowing
                             onClicked: {
-                                if (root.isFollowing) {
-                                    bridge.removeArtistFavorite(root.artistId, function(success) {})
-                                } else {
-                                    bridge.addArtistFavorite(root.artistId, function(success) {})
-                                }
+                                var w = Window.window
+                                var failed = function(ok) { if (!ok) w.favoriteFailed("followed artists") }
+                                if (root.isFollowing) bridge.removeArtistFavorite(root.artistId, failed)
+                                else                  bridge.addArtistFavorite(root.artistId, failed)
                             }
                         }
                     }
@@ -359,6 +370,23 @@ Rectangle {
         anchors { top: parent.top; left: parent.left; right: parent.right }
         height: 52; color: "transparent"
         BackButton { anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 8 } }
+    }
+
+    ColumnLayout {
+        objectName: "artistFailure"
+        visible: root.showFailure
+        anchors.centerIn: parent
+        spacing: 12
+        VectorIcon { Layout.alignment: Qt.AlignHCenter; name: "artist"; width: 40; height: 40; color: Theme.textDim; strokeWidth: 1.5 }
+        Text { Layout.alignment: Qt.AlignHCenter; text: root.loadError; color: Theme.textPrimary; font.pixelSize: 18; font.bold: true }
+        Text { Layout.alignment: Qt.AlignHCenter; text: "Check your connection and try again."; color: Theme.textSec; font.pixelSize: 13 }
+        PillButton {
+            objectName: "artistRetry"
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: 8
+            text: "Retry"; accent: true
+            onClicked: root.loadArtist()
+        }
     }
 
     LoadingOverlay { loading: root.loading }

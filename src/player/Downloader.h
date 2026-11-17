@@ -74,5 +74,6 @@ private:
 
     TidalClient *m_client;
     QHash<qlonglong, DownloadJob*> m_jobs;
+    static QString resolveFfmpeg();
     QString m_ffmpegPath;            // resolved ffmpeg executable, empty if not found
 };

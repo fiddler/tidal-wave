@@ -8,12 +8,6 @@ Rectangle {
     color: Theme.surface
     border.color: Theme.border
 
-    // The queue in true play order (respects shuffle). Rebound on queueChanged
-    // (via player.queueTracks) and on shuffle toggle. In shuffle mode each entry
-    // carries "_queueIndex" so rows still map back to the real queue index.
-    property var queueModel: (player.queueTracks, player.shuffle,
-                              player.shuffle ? player.playbackOrderTracks() : player.queueTracks)
-
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -54,16 +48,23 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: root.queueModel
+            // The queue in true play order (respects shuffle), as a model
+            // that reports each edit as a move, removal or insertion. Each row
+            // carries its real queue index, which differs from the row number
+            // while shuffled.
+            model: player.queueModel
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
+            // A moved row travels and the rows it passes make way; a removed
+            // row's neighbours close the gap.
+            move:      Transition { NumberAnimation { properties: "y"; duration: Theme.dur(200); easing.type: Easing.OutCubic } }
+            displaced: Transition { NumberAnimation { properties: "y"; duration: Theme.dur(200); easing.type: Easing.OutCubic } }
+            remove:    Transition { NumberAnimation { property: "opacity"; to: 0; duration: Theme.dur(120) } }
+
             delegate: QueueDelegate {
-                required property int     index
-                required property var     modelData
-                // In shuffle mode the row's real queue index travels in the map.
-                trackIndex: (modelData && modelData._queueIndex !== undefined)
-                            ? modelData._queueIndex : index
-                track:      modelData
+                required track
+                required property int queueIndex
+                trackIndex: queueIndex
                 width: queueListView.width
             }
         }
@@ -117,7 +118,7 @@ Rectangle {
                     spacing: 1
                     visible: !player.shuffle
                     opacity: qHov.hovered ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                    Behavior on opacity { NumberAnimation { duration: Theme.dur(120) } }
                     Repeater {
                         model: [{ glyph: "▲", delta: -1 }, { glyph: "▼", delta: 1 }]
                         Item {
@@ -207,10 +208,9 @@ Rectangle {
             Menu {
                 id: queueContextMenu
                 background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 8; implicitWidth: 180 }
-                MenuItem {
+                IconMenuItem {
                     text: "Remove from queue"
-                    contentItem: Text { text: parent.text; color: Theme.textPrimary; font.pixelSize: 13; leftPadding: 12; verticalAlignment: Text.AlignVCenter }
-                    background: Rectangle { color: parent.highlighted ? Theme.surfaceHov : "transparent" }
+                    iconName: "x"
                     onTriggered: player.removeFromQueue(queueItem.trackIndex)
                 }
             }
