@@ -58,12 +58,18 @@ public:
     static constexpr int kTransferTimeoutMs = 15000;
     static constexpr auto kAuthBase = "https://auth.tidal.com/v1/";
 
+    // Public for tests. The sign-in token goes to Tidal's API host and
+    // nowhere else: audio and covers come from other hosts, by signed or
+    // public URL.
+    QNetworkRequest makeRequest(const QUrl &url);
+    static bool sendsTokenTo(const QUrl &url);
+
 private:
     QNetworkAccessManager *m_nam;
     QString m_accessToken;
     QString m_countryCode;
 
-    QNetworkRequest makeRequest(const QUrl &url);
+
     void getDoc(const QString &base, const QString &endpoint, const QUrlQuery &params,
                 std::function<void(QJsonDocument, QString, int)> cb);
     void postStatus(const QString &endpoint, const QByteArray &body,

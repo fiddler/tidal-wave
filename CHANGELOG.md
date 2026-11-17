@@ -6,6 +6,12 @@
 
 - Backspace or Delete removes the selected tracks from a playlist, Tidal or
   local. More than one track asks first.
+- A playlist track Tidal no longer streams under its old id plays from
+  another release of the same recording, found by ISRC. The row shows as
+  playing; the player names the release it plays from. Taken from upstream
+  0.4.2 by [immineal](https://github.com/immineal) (`af236aa`, `3f9f4db`).
+  A track with no other release is named and skipped. Downloads and offline
+  copies of such a row are not covered.
 
 ### Fixed
 
@@ -13,6 +19,9 @@
   only the row under the cursor.
 - Back returns a playlist to where it was scrolled instead of the top.
 - Refreshing an offline playlist no longer jumps the list to the top.
+- The sign-in token goes to api.tidal.com only. It was also sent with every
+  audio file and cover the app fetched, to whichever host served them, and
+  would have followed a redirect to another host. Found by upstream 0.4.1.
 
 ## 2026-10-13
 

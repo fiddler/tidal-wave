@@ -329,6 +329,67 @@ private slots:
         QCOMPARE(lists.size(), 1);
         QCOMPARE(lists[0].uuid, QStringLiteral("u1"));
     }
+
+    // ── twins: a row Tidal no longer streams, played from another release ──
+    void trackKeepsItsIsrcIntoTheQueueRow() {
+        const Track t = Track::fromJson(obj("{'id':7,'title':'T','isrc':'USABC1234567','allowStreaming':false}"));
+        QCOMPARE(t.isrc, QStringLiteral("USABC1234567"));
+        QCOMPARE(t.available, false);
+        const QVariantMap row = TidalBridge::trackToMap(t);
+        QCOMPARE(row.value("isrc").toString(), QStringLiteral("USABC1234567"));
+        QCOMPARE(row.value("available").toBool(), false);
+    }
+    void twinIsAStreamedTrackOfTheSameIsrcWithAnotherId() {
+        Track dead; dead.id = 7; dead.isrc = "USABC1234567"; dead.album.title = "Album";
+        const Track twin = TidalClient::pickTwin(obj(
+            "{'items':["
+            "{'id':7,'isrc':'USABC1234567','album':{'title':'Album'}},"
+            "{'id':8,'isrc':'USABC1234567','allowStreaming':false,'album':{'title':'Album'}},"
+            "{'id':9,'isrc':'OTHER0000000','album':{'title':'Album'}},"
+            "{'id':10,'isrc':'usabc1234567','album':{'title':'Best of'}}]}"), dead);
+        QCOMPARE(twin.id, 10);
+    }
+    void twinPrefersTheSameAlbumThenHiResThenPopularity() {
+        Track dead; dead.id = 7; dead.isrc = "X"; dead.album.title = "Album";
+        QCOMPARE(TidalClient::pickTwin(obj(
+            "{'items':["
+            "{'id':20,'isrc':'X','popularity':90,'album':{'title':'Best of'},'mediaMetadata':{'tags':['HIRES_LOSSLESS']}},"
+            "{'id':21,'isrc':'X','popularity':1,'album':{'title':'Album'}}]}"), dead).id, 21);
+        QCOMPARE(TidalClient::pickTwin(obj(
+            "{'items':["
+            "{'id':30,'isrc':'X','popularity':90,'album':{'title':'Album'}},"
+            "{'id':31,'isrc':'X','popularity':1,'album':{'title':'Album'},'mediaMetadata':{'tags':['LOSSLESS','HIRES_LOSSLESS']}}]}"), dead).id, 31);
+        QCOMPARE(TidalClient::pickTwin(obj(
+            "{'items':["
+            "{'id':41,'isrc':'X','popularity':5,'album':{'title':'Album'}},"
+            "{'id':40,'isrc':'X','popularity':50,'album':{'title':'Album'}}]}"), dead).id, 40);
+    }
+    void noTwinIsATrackWithoutAnId() {
+        Track dead; dead.id = 7; dead.isrc = "X";
+        QCOMPARE(TidalClient::pickTwin(obj("{'items':[]}"), dead).id, 0);
+        QCOMPARE(TidalClient::pickTwin(obj("{'items':[{'id':7,'isrc':'X'}]}"), dead).id, 0);
+    }
+
+    // ── the sign-in token leaves for the API host only ──
+    void tokenGoesToTheApiHostOnly() {
+        QVERIFY(TidalApi::sendsTokenTo(QUrl("https://api.tidal.com/v1/tracks/1")));
+        QVERIFY(TidalApi::sendsTokenTo(QUrl("https://API.tidal.com/v2/favorites/mixes")));
+        QVERIFY(!TidalApi::sendsTokenTo(QUrl("http://api.tidal.com/v1/tracks/1")));
+        QVERIFY(!TidalApi::sendsTokenTo(QUrl("https://sp-pr-fa.audio.tidal.com/mediatracks/x/0.flac")));
+        QVERIFY(!TidalApi::sendsTokenTo(QUrl("https://resources.tidal.com/images/a/b/640x640.jpg")));
+        QVERIFY(!TidalApi::sendsTokenTo(QUrl("https://api.tidal.com.evil.example/v1/x")));
+    }
+    void requestToAnotherHostCarriesNoToken() {
+        TidalApi api;
+        api.setAccessToken("secret");
+        const QNetworkRequest audio = api.makeRequest(QUrl("https://sp-pr-fa.audio.tidal.com/x.flac"));
+        QVERIFY(!audio.hasRawHeader("Authorization"));
+        QVERIFY(!audio.hasRawHeader("X-Tidal-Token"));
+        const QNetworkRequest call = api.makeRequest(QUrl("https://api.tidal.com/v1/tracks/1"));
+        QCOMPARE(call.rawHeader("Authorization"), QByteArray("Bearer secret"));
+        QCOMPARE(call.attribute(QNetworkRequest::RedirectPolicyAttribute).toInt(),
+                 int(QNetworkRequest::SameOriginRedirectPolicy));
+    }
 };
 
 QTEST_GUILESS_MAIN(TstApi)

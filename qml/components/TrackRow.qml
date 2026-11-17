@@ -28,8 +28,16 @@ Item {
     // isLoading are both false while paused — and after a session restore,
     // where the queue is back but no stream is loaded — so neither can mark
     // the row on its own. Derived here rather than passed in by every page.
-    readonly property bool isCurrent: !!(trackData && player.currentTrack
+    readonly property bool isCurrent: standsIn || !!(trackData && player.currentTrack
                                          && player.currentTrack.id === trackData.id)
+
+    // A row Tidal no longer streams is played from another release of the
+    // same recording, which has another id. Pages compare ids, so the row
+    // would show nothing while its twin plays. After upstream 3f9f4db.
+    readonly property bool standsIn: !!(trackData && player.currentTrack
+                                        && player.currentTrack.standsForId === trackData.id)
+    readonly property bool playingNow: isPlaying || (standsIn && player.playing === true)
+    readonly property bool loadingNow: isLoading || (standsIn && player.loading === true)
 
     // Local library tracks have no Tidal id, so every action that talks to
     // Tidal (download, favourite, radio, album/artist links, share URL) is
@@ -38,7 +46,11 @@ Item {
 
     // Tidal still lists tracks whose rights expired, but refuses to stream
     // them. They are shown greyed out and cannot be played or queued.
-    readonly property bool isUnavailable: !!(trackData && trackData.available === false)
+    // isDead is what Tidal says of this id. With an ISRC the player can look
+    // for the recording's other release, so only a dead row without one is
+    // shown as unplayable.
+    readonly property bool isDead: !!(trackData && trackData.available === false)
+    readonly property bool isUnavailable: isDead && !trackData.isrc
     property int    localPlaylistId: 0   // >0 when shown inside a local playlist
 
     // Selection + drag. `selection` is the page's TrackSelection object and
@@ -190,8 +202,8 @@ Item {
         // set while its stream loads, so the dim "buffering" tint would never
         // be seen if the brighter one won first.
         color: root.selected ? Qt.rgba(1, 1, 1, 0.13)
-               : isLoading ? Qt.rgba(0, 0.698, 0.973, 0.035)
-               : (isPlaying || isCurrent) ? Qt.rgba(0, 0.698, 0.973, 0.08)
+               : loadingNow ? Qt.rgba(0, 0.698, 0.973, 0.035)
+               : (playingNow || isCurrent) ? Qt.rgba(0, 0.698, 0.973, 0.08)
                : hov.hovered ? Theme.surfaceHov : "transparent"
         border.width: root.activeFocus ? 2 : 0
         border.color: Theme.accent
@@ -259,14 +271,14 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 Text {
                     anchors.centerIn: parent
-                    visible: !isCurrent && !isLoading && (!hov.hovered || root.isUnavailable)
+                    visible: !isCurrent && !loadingNow && (!hov.hovered || root.isUnavailable)
                     text: root.trackNum
                     color: Theme.textDim
                     font.pixelSize: 13
                 }
                 VectorIcon {
                     anchors.centerIn: parent
-                    visible: isCurrent && !isLoading && !hov.hovered
+                    visible: isCurrent && !loadingNow && !hov.hovered
                     name: "music"
                     color: Theme.accent
                     width: 14
@@ -280,7 +292,7 @@ Item {
                     id: loadSpinner
                     anchors.centerIn: parent
                     width: 14; height: 14
-                    visible: root.isLoading
+                    visible: root.loadingNow
                     Rectangle {
                         width: 3; height: 6; radius: 1.5
                         anchors.top: parent.top
@@ -292,13 +304,13 @@ Item {
                         from: 0; to: 360
                         duration: 800
                         loops: Animation.Infinite
-                        running: root.isLoading && loadSpinner.visible && AppFocus.active
+                        running: root.loadingNow && loadSpinner.visible && AppFocus.active
                     }
                 }
                 Text {
                     anchors.centerIn: parent
-                    visible: hov.hovered && !isLoading && !root.isUnavailable
-                    text: isPlaying ? "⏸" : "▶"
+                    visible: hov.hovered && !loadingNow && !root.isUnavailable
+                    text: playingNow ? "⏸" : "▶"
                     color: Theme.textPrimary
                     font.pixelSize: 14
                 }
@@ -333,7 +345,7 @@ Item {
                     Layout.fillWidth: true
                     text: root.title
                     color: root.isUnavailable ? Theme.textDim
-                           : (isPlaying || isCurrent) ? Theme.accent : Theme.textPrimary
+                           : (playingNow || isCurrent) ? Theme.accent : Theme.textPrimary
                     font.pixelSize: 14
                     elide: Text.ElideRight
                 }
@@ -435,7 +447,7 @@ Item {
             // Download button — revealed on hover; stays visible while busy/done/error
             Item {
                 id: dlButton
-                visible: !root.isLocalTrack && !root.isUnavailable && (hov.hovered || root.dlState !== "idle")
+                visible: !root.isLocalTrack && !root.isDead && (hov.hovered || root.dlState !== "idle")
                 Layout.preferredWidth: 24
                 Layout.fillHeight: true
                 Layout.alignment: Qt.AlignVCenter
@@ -553,7 +565,7 @@ Item {
         IconMenuItem {
             text: "Download…"
             iconName: "download"
-            visible: !root.isLocalTrack && !root.isUnavailable
+            visible: !root.isLocalTrack && !root.isDead
             height: visible ? implicitHeight : 0
             enabled: root.trackData !== null && root.dlState !== "busy"
             onTriggered: { if (root.trackData) downloader.downloadTrack(root.trackData) }

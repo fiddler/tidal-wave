@@ -63,6 +63,11 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 >   Home and Search rows again (their wheel handler saw neither: it listened on
 >   one axis only, and read an angle a trackpad does not send), and a row with
 >   more cards than fit gets hover arrows and a scrollbar (upstream bug)
+> - **Playlist editing by selection.** ⌫ or Delete removes the selected
+>   tracks from a Tidal or local playlist, "Remove from playlist" takes the
+>   whole selection, and more than one track asks first
+> - **Back remembers the scroll.** Returning to a playlist lands where you
+>   left it, not at the top
 >
 > Taken back from upstream 0.4.0, rewritten here because the trees no longer
 > merge. The designs are immineal's:
@@ -78,6 +83,15 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 >   its new place; all of it stops when macOS "Reduce motion" is on
 > - **Whole discography.** Artist pages show singles, EPs and compilations
 > - **Drawn icons** in every context menu
+>
+> Taken back from upstream 0.4.1 and 0.4.2, the same way:
+>
+> - **Dead playlist tracks play again.** A playlist keeps a track's old id
+>   after Tidal stops streaming it. Such a row now plays from another release
+>   of the same recording, found by ISRC; one with no other release is named
+>   and skipped
+> - **The sign-in token stays with Tidal's API.** It was also sent with every
+>   audio file and cover fetched, to whichever host served them
 >
 > Upstream maintainers: every commit is scoped and conventional — cherry-pick
 > anything you like, or ask for a focused PR of any subset.
@@ -127,6 +141,7 @@ I used Claude Code over the course of 3 days to generate most of the code for th
 | Ctrl + Q | Toggle Queue panel |
 | Escape | Go back |
 | Alt + Left | Go back |
+| Backspace / Delete | Remove the selected tracks from the playlist |
 | Ctrl + , | Open Settings |
 
 ## Installation

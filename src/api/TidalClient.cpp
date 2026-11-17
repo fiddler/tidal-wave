@@ -1,3 +1,4 @@
+#include <tuple>
 #include "TidalClient.h"
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -579,9 +580,14 @@ void TidalClient::fetchStreamManifest(qint64 trackId, AudioQuality quality, Stre
     q.addQueryItem("audioquality",      qualityString(quality));
     q.addQueryItem("prefetch",          "false");
 
-    m_api->get(QStringLiteral("tracks/%1/playbackinfopostpaywall").arg(trackId), q,
-        [cb](QJsonObject root, QString err) {
-            if (!err.isEmpty()) { cb({}, err); return; }
+    m_api->getStatus(QStringLiteral("tracks/%1/playbackinfopostpaywall").arg(trackId), q,
+        [cb](QJsonObject root, QString err, int) {
+            if (!err.isEmpty()) {
+                StreamManifest refused;
+                refused.refusedSubStatus = root["subStatus"].toInt();
+                cb(refused, err);
+                return;
+            }
 
             StreamManifest m;
             m.codec      = root["audioQuality"].toString();
@@ -719,6 +725,37 @@ void TidalClient::fetchTrackRadio(qint64 trackId, TracksCallback cb) {
         [this, cb](QJsonObject root, QString err) {
             cb(err.isEmpty() ? parseTracks(root) : QList<Track>{}, err);
         });
+}
+
+void TidalClient::fetchTwin(const Track &of, std::function<void(Track, QString)> cb) {
+    if (of.isrc.isEmpty()) { cb({}, {}); return; }
+    QUrlQuery q;
+    q.addQueryItem("isrc", of.isrc);
+    // Answers the tracks of that ISRC that are streamed in this country
+    // (probed 2026-11-17: 9 of 12 dead playlist rows had one).
+    m_api->get(QStringLiteral("tracks"), q,
+        [of, cb](QJsonObject root, QString err) {
+            cb(err.isEmpty() ? pickTwin(root, of) : Track{}, err);
+        });
+}
+
+Track TidalClient::pickTwin(const QJsonObject &root, const Track &of) {
+    // Lower is better, field by field: the same album title first, then
+    // hi-res, then the more popular, then the lower id.
+    using Rank = std::tuple<bool, bool, int, qint64>;
+    Track best;
+    Rank  bestRank;
+    for (const auto &v : root["items"].toArray()) {
+        const QJsonObject j = v.toObject();
+        const Track t = Track::fromJson(j);
+        if (t.id <= 0 || t.id == of.id || !t.available) continue;
+        if (t.isrc.compare(of.isrc, Qt::CaseInsensitive) != 0) continue;
+        const bool hiRes = j["mediaMetadata"].toObject()["tags"].toArray()
+                               .contains(QStringLiteral("HIRES_LOSSLESS"));
+        const Rank rank{t.album.title != of.album.title, !hiRes, -t.popularity, t.id};
+        if (best.id == 0 || rank < bestRank) { best = t; bestRank = rank; }
+    }
+    return best;
 }
 
 void TidalClient::fetchLyrics(qint64 trackId, std::function<void(QString, bool, QString)> cb) {

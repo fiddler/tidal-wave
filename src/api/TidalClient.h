@@ -140,6 +140,10 @@ public:
     void fetchTrackRadio(qint64 trackId, TracksCallback cb);
     void fetchLyrics    (qint64 trackId, std::function<void(QString, bool, QString)> cb);
     void fetchTrackCredits(qint64 trackId, std::function<void(TrackCredits, QString)> cb);
+    // Another release of the same recording that Tidal still streams, found
+    // by ISRC. A track with id 0 means there is none. After upstream af236aa.
+    void fetchTwin(const Track &of, std::function<void(Track, QString)> cb);
+    static Track pickTwin(const QJsonObject &root, const Track &of);
 
     // Recently played
     void fetchRecentlyPlayed(TracksCallback cb);

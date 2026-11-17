@@ -113,6 +113,10 @@ public:
     // for a row it is going to drop.
     Q_INVOKABLE QVariantMap searchLibrary(const QString &query, int limit = 6) const;
 
+    // The row every list and the queue hold for a track. Public for the
+    // player, which builds one for a track it found itself, and for tests.
+    static QVariantMap  trackToMap  (const Track &t);
+
 signals:
     void preferredQualityChanged();
     void favoriteTracksChanged();
@@ -139,7 +143,6 @@ private:
     void loadNextUserPlaylistsPage(int offset);
     void loadFavoriteMixes();
 
-    static QVariantMap  trackToMap  (const Track &t);
     static QVariantMap  albumToMap  (const Album &a);
     static QVariantMap  artistToMap (const Artist &a);
     static QVariantMap  playlistToMap(const Playlist &p);

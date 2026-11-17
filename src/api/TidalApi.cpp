@@ -22,10 +22,20 @@ QNetworkRequest TidalApi::makeRequest(const QUrl &url) {
     QNetworkRequest req(url);
     req.setHeader(QNetworkRequest::UserAgentHeader,
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 KHTML, like Gecko Chrome/131 Safari/537.36");
+    if (!sendsTokenTo(url)) return req;
     req.setRawHeader("X-Tidal-Token", "fX2JxdmntZWK0ixT");
     if (!m_accessToken.isEmpty())
         req.setRawHeader("Authorization", ("Bearer " + m_accessToken).toUtf8());
+    // Qt resends every header to the target of a redirect, so a request that
+    // carries the token follows none that leave the host.
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                     QNetworkRequest::SameOriginRedirectPolicy);
     return req;
+}
+
+bool TidalApi::sendsTokenTo(const QUrl &url) {
+    return url.scheme() == QLatin1String("https")
+        && url.host().compare(QUrl(QString::fromLatin1(kApiBase)).host(), Qt::CaseInsensitive) == 0;
 }
 
 // The status a finished reply carries, or 0 when it never got one.
@@ -64,7 +74,9 @@ void TidalApi::getDoc(const QString &base, const QString &endpoint, const QUrlQu
         reply->deleteLater();
         const int status = httpStatusOf(reply);
         if (reply->error() != QNetworkReply::NoError) {
-            cb({}, reply->errorString(), status);
+            // A refusal's body says why ({status, subStatus, userMessage}).
+            // It rides along for the callers that tell refusals apart.
+            cb(QJsonDocument::fromJson(reply->readAll()), reply->errorString(), status);
             return;
         }
         QJsonParseError err;

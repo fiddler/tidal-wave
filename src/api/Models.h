@@ -84,6 +84,9 @@ struct Track {
     // False for tracks Tidal still lists but no longer streams (rights expired
     // or region-locked). Such tracks are shown greyed out and are never queued.
     bool    available = true;
+    // The recording's code, the same under every id Tidal has it as. It is
+    // how a row that is no longer streamed finds the release that still is.
+    QString isrc;
     Album   album;
     QList<Artist> artists;
     // Set only for tracks from the local library. When present the player
@@ -112,6 +115,7 @@ struct Track {
         // Both flags default to true: a few endpoints omit them, and an absent
         // flag must not grey out a track that plays perfectly well.
         t.available    = j["allowStreaming"].toBool(true) && j["streamReady"].toBool(true);
+        t.isrc         = j["isrc"].toString();
         if (j.contains("album"))
             t.album    = Album::fromJson(j["album"].toObject());
         for (const auto &v : j["artists"].toArray())
@@ -258,6 +262,9 @@ struct StreamManifest {
     int     bitDepth   = 16;
     double  replayGainTrack = 0.0;
     double  replayGainAlbum = 0.0;
+    // Set on a refusal only: Tidal's subStatus, 4005 for a track it lists
+    // and does not stream. 0 when the request never got an answer.
+    int     refusedSubStatus = 0;
 };
 
 struct SearchResults {

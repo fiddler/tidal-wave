@@ -157,6 +157,11 @@ private:
     // startMs > 0 resumes a restored session: the offset is applied once the
     // media is loaded, not before, or QMediaPlayer drops the seek.
     void loadAndPlay(int index, qint64 startMs = 0);
+    // Looks for a streamed release of a row Tidal no longer streams, puts it
+    // in the row's place and loads it. Each loadAndPlay() outdates the lookup
+    // before it.
+    void resolveTwin(int index, qint64 startMs);
+    int  m_twinSerial = 0;
     void setLoading(bool l);
     Track trackFromMap(const QVariantMap &m) const;
     void buildShuffleOrder();

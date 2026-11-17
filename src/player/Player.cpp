@@ -10,6 +10,7 @@
 #include "DashFetcher.h"
 #include "MpvAudio.h"
 #include "DashStream.h"
+#include "api/TidalBridge.h"
 #include <algorithm>
 #include <numeric>
 #include <QRandomGenerator>
@@ -419,8 +420,20 @@ void Player::buildShuffleOrder() {
     }
 }
 
+// A row Tidal lists and does not stream.
+static bool rowAvailable(const QVariantMap &row) {
+    return row.value(QStringLiteral("available"), true).toBool();
+}
+// Such a row can still be played when the recording has another release,
+// which its ISRC finds. Not once a lookup has come back empty.
+static bool rowMayHaveTwin(const QVariantMap &row) {
+    return !rowAvailable(row) && !row.value(QStringLiteral("isrc")).toString().isEmpty()
+        && !row.value(QStringLiteral("_twinMissing")).toBool();
+}
+
 Track Player::trackFromMap(const QVariantMap &m) const {
     Track t;
+    t.isrc      = m["isrc"].toString();
     t.id        = m["id"].toLongLong();
     t.title     = m["title"].toString();
     t.duration  = m["duration"].toInt();
@@ -449,19 +462,22 @@ void Player::loadAndPlay(int index, qint64 startMs) {
     m_pendingSeekMs     = qMax(0LL, startMs);
     m_lastSavedPosition = m_pendingSeekMs;
 
-    // Tidal keeps retired tracks in playlists but refuses to stream them. The
-    // UI greys them out, so this only fires on "Play all", shuffle, or an
-    // auto-advance: step past them instead of stalling on a stream error.
-    // The counter bounds the walk when every remaining track is unavailable.
-    if (!m_queue[index].value(QStringLiteral("available"), true).toBool()) {
+    ++m_twinSerial;
+
+    // Tidal keeps retired tracks in playlists but refuses to stream them. A
+    // row whose recording may live on under another id is looked up when it
+    // is reached; the rest are stepped past instead of stalling on a stream
+    // error. The counter bounds the walk when nothing left can be played.
+    auto playable = [this](int i) { return rowAvailable(m_queue[i]) || rowMayHaveTwin(m_queue[i]); };
+    if (!playable(index)) {
         for (int guard = m_queue.count(); guard > 0; --guard) {
             m_index = index;
             int n = nextIndex();
             if (n < 0 || n == index) break;
             index = n;
-            if (m_queue[index].value(QStringLiteral("available"), true).toBool()) break;
+            if (playable(index)) break;
         }
-        if (!m_queue[index].value(QStringLiteral("available"), true).toBool()) {
+        if (!playable(index)) {
             m_player->stop();
             setLoading(false);
             emit error(tr("This track is no longer available on Tidal."));
@@ -469,6 +485,10 @@ void Player::loadAndPlay(int index, qint64 startMs) {
         }
         m_index = index;
         emit queueChanged();
+    }
+    if (!rowAvailable(m_queue[index])) {
+        resolveTwin(index, m_pendingSeekMs);
+        return;
     }
 
     // Order matters: stop() and clearing the source make QMediaPlayer report
@@ -601,6 +621,19 @@ void Player::loadAndPlay(int index, qint64 startMs) {
                 return;
             }
             if (!err.isEmpty()) {
+                // 4005: listed as streamed, refused all the same. The row is
+                // marked as what it is, and the load starts over down the
+                // path that looks for the recording's other release.
+                const bool isRow = m_index >= 0 && m_index < m_queue.count()
+                    && m_queue[m_index].value("id").toLongLong() == loadingTrackId;
+                // A twin that is refused too is not looked up again: two ids that
+                // name each other would go round for ever.
+                if (manifest.refusedSubStatus == 4005 && isRow && rowAvailable(m_queue[m_index])
+                    && !m_queue[m_index].contains("standsForId")) {
+                    m_queue[m_index]["available"] = false;
+                    loadAndPlay(m_index, m_pendingSeekMs);
+                    return;
+                }
                 setLoading(false);
                 emit error("Stream error: " + err);
                 return;
@@ -654,6 +687,48 @@ void Player::loadAndPlay(int index, qint64 startMs) {
                 m_player->play();
             }
         });
+}
+
+void Player::resolveTwin(int index, qint64 startMs) {
+    m_index = index;
+    m_player->stop();
+    m_player->setSource(QUrl());
+    setLoading(true);
+    cancelPreload();
+    m_streamedQuality.clear();
+    // The row shows as loading while the lookup runs. An answer to the
+    // stream request of the track before it no longer matches this id.
+    m_currentTrack = trackFromMap(m_queue[index]);
+    emit currentTrackChanged();
+
+    const int    serial = m_twinSerial;
+    const qint64 rowId  = m_currentTrack.id;
+    const QString title = m_currentTrack.title;
+    m_client->fetchTwin(m_currentTrack, [this, serial, rowId, title, startMs](Track twin, QString err) {
+        if (serial != m_twinSerial || m_index < 0 || m_index >= m_queue.count()
+            || m_queue[m_index].value("id").toLongLong() != rowId) return;
+        if (!err.isEmpty()) {
+            // The lookup failed, which says nothing about the track.
+            setLoading(false);
+            emit error("Stream error: " + err);
+            return;
+        }
+        if (twin.id == 0) {
+            m_queue[m_index]["_twinMissing"] = true;
+            emit error(tr("“%1” is no longer available on Tidal.").arg(title));
+        } else {
+            qInfo() << "[play] track" << rowId << "is not streamed; playing its twin" << twin.id;
+            QVariantMap row = TidalBridge::trackToMap(twin);
+            // Lists mark the row they hold by this id (TrackRow.standsIn).
+            row["standsForId"] = rowId;
+            if (m_queue[m_index].contains("_userQueued"))
+                row["_userQueued"] = m_queue[m_index].value("_userQueued");
+            m_queue[m_index] = row;
+            emit queueChanged();
+        }
+        // With a twin this loads it; without, it steps to the next row.
+        loadAndPlay(m_index, startMs);
+    });
 }
 
 void Player::onMediaStatusChanged(MpvAudio::Status status) {
@@ -729,6 +804,9 @@ void Player::preloadNext() {
 
     cancelPreload();
     m_preloadFailedId = 0;
+
+    // A row that is not streamed is looked up when it is reached.
+    if (!rowAvailable(m_queue[next])) return;
 
     // Local files open instantly and have no manifest — nothing to preload.
     if (!m_queue[next].value("localPath").toString().isEmpty()) return;

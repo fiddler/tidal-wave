@@ -193,6 +193,11 @@ out of the real credentials file.
   returns a `MIX_HEADER` and a `TRACK_LIST`. Saved mixes live at `v2/favorites/mixes`.
 - `tracks/<id>/credits?includeContributors=true` is a bare JSON array of `{type, contributors}`.
 - A delisted album answers 404 subStatus 2001 while favourites still list it.
+- A dead row has a twin. Playlists keep a track's old id after Tidal stops streaming it: the row
+  lists `allowStreaming` and `streamReady` false, and `playbackinfopostpaywall` answers 401
+  subStatus 4005 "Asset is not ready for playback". `tracks?isrc=<isrc>` lists the streamed
+  releases of the same recording (2026-11-17: 36 dead rows in the first playlists scanned, 9 of
+  12 looked up had a twin). `Player::resolveTwin` swaps one in.
 - `playbackinfopostpaywall` serves this client FLAC (93 of 93 streams in `playback.jsonl`,
   28 Aug to 22 Sep). Upstream's device-code client gets 320 kbps AAC from it.
 
