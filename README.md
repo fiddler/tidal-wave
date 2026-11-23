@@ -68,6 +68,10 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 >   whole selection, and more than one track asks first
 > - **Back remembers the scroll.** Returning to a playlist lands where you
 >   left it, not at the top
+> - **Playback that recovers.** A failed load is tried again before any error
+>   shows, errors are shown at all, and Play reloads a track that never
+>   started. Long lossless tracks no longer fail on the first try: their
+>   segments are fetched 24 at a time, not all at once, which Tidal's CDN refused
 >
 > Taken back from upstream 0.4.0, rewritten here because the trees no longer
 > merge. The designs are immineal's:

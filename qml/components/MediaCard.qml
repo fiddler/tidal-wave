@@ -116,6 +116,9 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 radius: parent.radius
+                // Above coverArea, which is declared later and would otherwise
+                // take the play button's press and open the card.
+                z: 1
                 color: Qt.rgba(0, 0, 0, hov.hovered ? 0.45 : 0)
                 Behavior on color { ColorAnimation { duration: Theme.dur(150) } }
 

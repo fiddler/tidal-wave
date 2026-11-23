@@ -150,6 +150,17 @@ mean the stream began with a `moof`, so the init segment was missing. Probable c
 a failed `DashStream` probe counted its segment as zero bytes and served a file with a hole. A
 probe is now retried and a failure breaks the stream instead.
 
+Cause proven 2026-11-23: `DashStream` sent one probe per segment in a single burst, and the CDN's
+HTTP/2 refuses streams past its limit. A 160-segment track lost about ten probes to `Server refused
+a stream`; three instant retries met the same refusal, and so did `Player`'s reload 400 ms later. A
+third load seconds later passed, the CDN edge being warm by then. Long tracks only. `DashNet` now
+queues: 24 requests at once, whole segments ahead of probes, a growing pause before a retry.
+
+`playback.jsonl` shows only `unrecognized file format` for this. The reason is in the unified log,
+where Qt sends `qWarning` when the app runs from Finder:
+`log show --last 10m --info --debug --predicate 'process == "Tidal Wave" AND eventMessage CONTAINS "[dash]"'`.
+Info and debug lines last hours, not days, so read it soon.
+
 ### Crackle, not a jam
 
 A different shape, and the recorder does not catch it. Crackling or clicking on **any** cmd-tab,

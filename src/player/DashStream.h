@@ -5,6 +5,7 @@
 #include <QUrl>
 
 #include <condition_variable>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -28,14 +29,29 @@ public:
     // for a 206 it comes from Content-Range, so a ranged read still learns how
     // big the segment is.
     using Callback = std::function<void(QByteArray body, qint64 totalSize, QString error)>;
-    // last < 0 means "no Range header": fetch the whole thing.
-    void request(const QUrl &url, qint64 first, qint64 last, Callback cb);
+    // Asked just before a queued request is sent. False drops it unsent, with
+    // no callback: its stream is gone.
+    using Wanted = std::function<bool()>;
+    // last < 0 means "no Range header": fetch the whole thing. An urgent
+    // request goes ahead of the queue; delayMs holds a retry back first.
+    void request(const QUrl &url, qint64 first, qint64 last, Callback cb,
+                 Wanted wanted = {}, bool urgent = false, int delayMs = 0);
 
 private:
     explicit DashNet(QObject *parent = nullptr);
-    void doRequest(const QUrl &url, qint64 first, qint64 last, const Callback &cb);
+
+    struct Job { QUrl url; qint64 first; qint64 last; Callback cb; Wanted wanted; };
+    void pump();
+    void send(const Job &job);
+
+    // Requests on the wire at once. The CDN answers HTTP/2, and it refuses
+    // streams past its limit: a 160-segment track probed in one burst lost
+    // about ten of them to "Server refused a stream" (2026-11-23).
+    static constexpr int kMaxActive = 24;
 
     QNetworkAccessManager *m_nam = nullptr;   // created on, and used from, the thread
+    std::deque<Job> m_queue;                  // thread-confined, like m_nam
+    int m_active = 0;
 };
 
 // A Tidal DASH stream presented to mpv as one seekable file.
@@ -80,6 +96,8 @@ private:
     void startProbe();
     void probeSegment(int index, int attempt);
     void ensureSegment(int index);           // caller holds m_mutex
+    void fetchSegment(int index, int attempt);
+    DashNet::Wanted wanted();
     void evictFar(int keepAround);           // caller holds m_mutex
 
     static constexpr int kWindow = 8;        // full segments kept cached, ~4 MB
@@ -87,7 +105,8 @@ private:
     // boundary when it opens a fragmented MP4; serving those reads from here
     // keeps the scan off the network entirely.
     static constexpr qint64 kHead = 16384;
-    static constexpr int kProbeAttempts = 3;
+    static constexpr int kAttempts = 4;      // per request, with a growing pause
+    static constexpr int kRetryStepMs = 200;
 
     const quint64 m_id;
     const QStringList m_urls;

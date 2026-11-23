@@ -14,6 +14,12 @@
   fails cleanly. It was played with a hole in it, which ended as
   "unrecognized file format".
 - Scrolling the home page over a card row no longer jerks up and down.
+- Long lossless tracks start on the first try. All their segments were
+  requested at once and Tidal's CDN refused some, which ended as
+  "unrecognized file format" until Play was pressed again. Requests now go
+  24 at a time, audio ahead of sizing, with a pause before a retry.
+- The play button on an album, playlist or mix card plays it. It opened the
+  page instead, since albums became draggable.
 
 ## 2026-11-17
 

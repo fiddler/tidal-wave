@@ -6,6 +6,7 @@
 #include <QNetworkRequest>
 #include <QElapsedTimer>
 #include <QThread>
+#include <QTimer>
 
 #include <mpv/client.h>
 #include <mpv/stream_cb.h>
@@ -32,14 +33,35 @@ DashNet *DashNet::instance() {
     return net;
 }
 
-void DashNet::request(const QUrl &url, qint64 first, qint64 last, Callback cb) {
+void DashNet::request(const QUrl &url, qint64 first, qint64 last, Callback cb,
+                      Wanted wanted, bool urgent, int delayMs) {
     // A lambda, not Q_ARG: std::function has no metatype to marshal through.
-    QMetaObject::invokeMethod(this, [this, url, first, last, cb = std::move(cb)]() {
-        doRequest(url, first, last, cb);
+    // The timer is started on this thread, which is where it has to live.
+    QMetaObject::invokeMethod(this, [this, urgent, delayMs,
+            job = Job{url, first, last, std::move(cb), std::move(wanted)}]() {
+        auto enqueue = [this, urgent, job]() {
+            if (urgent) m_queue.push_front(job);
+            else        m_queue.push_back(job);
+            pump();
+        };
+        if (delayMs > 0) QTimer::singleShot(delayMs, this, enqueue);
+        else             enqueue();
     }, Qt::QueuedConnection);
 }
 
-void DashNet::doRequest(const QUrl &url, qint64 first, qint64 last, const Callback &cb) {
+void DashNet::pump() {
+    while (m_active < kMaxActive && !m_queue.empty()) {
+        const Job job = std::move(m_queue.front());
+        m_queue.pop_front();
+        if (job.wanted && !job.wanted()) continue;
+        send(job);
+    }
+}
+
+void DashNet::send(const Job &job) {
+    const QUrl &url = job.url;
+    const qint64 first = job.first, last = job.last;
+    const Callback cb = job.cb;
     // Created lazily so it belongs to this thread, not whoever constructed us.
     if (!m_nam) {
         m_nam = new QNetworkAccessManager(this);
@@ -57,8 +79,12 @@ void DashNet::doRequest(const QUrl &url, qint64 first, qint64 last, const Callba
                                   + "-" + QByteArray::number(last));
 
     QNetworkReply *reply = m_nam->get(req);
-    QObject::connect(reply, &QNetworkReply::finished, this, [reply, cb]() {
+    ++m_active;
+    QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, cb]() {
         reply->deleteLater();
+        --m_active;
+        // Queued, so a callback that asks for more is counted before it runs.
+        QMetaObject::invokeMethod(this, &DashNet::pump, Qt::QueuedConnection);
         if (reply->error() != QNetworkReply::NoError) {
             cb({}, -1, reply->errorString());
             return;
@@ -168,12 +194,22 @@ void DashStream::startProbe() {
         ensureSegment(i);
 }
 
+DashNet::Wanted DashStream::wanted() {
+    // Weak: a queued request must not keep a retired stream alive.
+    return [weak = weak_from_this()]() {
+        auto self = weak.lock();
+        if (!self) return false;
+        std::lock_guard<std::mutex> lock(self->m_mutex);
+        return !self->m_aborted;
+    };
+}
+
 void DashStream::probeSegment(int index, int attempt) {
     auto self = shared_from_this();
     DashNet::instance()->request(QUrl(m_urls.at(index)), 0, kHead - 1,
         [self, index, attempt](QByteArray body, qint64 size, QString err) {
             const bool ok = err.isEmpty() && size > 0;
-            if (!ok && attempt < kProbeAttempts) {
+            if (!ok && attempt < kAttempts) {
                 self->probeSegment(index, attempt + 1);
                 return;
             }
@@ -205,7 +241,7 @@ void DashStream::probeSegment(int index, int attempt) {
                 }
             }
             self->m_cv.notify_all();
-        });
+        }, wanted(), false, (attempt - 1) * kRetryStepMs);
 }
 
 void DashStream::ensureSegment(int index) {
@@ -213,17 +249,29 @@ void DashStream::ensureSegment(int index) {
     if (!m_data[index].isEmpty() || m_inFlight[index]) return;
 
     m_inFlight[index] = true;
+    fetchSegment(index, 1);
+}
+
+void DashStream::fetchSegment(int index, int attempt) {
     auto self = shared_from_this();
+    // Urgent: playback waits on a whole segment, and it must not queue behind
+    // the probes of this stream or of a preloading one.
     DashNet::instance()->request(QUrl(m_urls.at(index)), 0, -1,
-        [self, index](QByteArray body, qint64, QString err) {
+        [self, index, attempt](QByteArray body, qint64, QString err) {
+            const bool ok = err.isEmpty() && !body.isEmpty();
+            if (!ok && attempt < kAttempts) {
+                self->fetchSegment(index, attempt + 1);
+                return;
+            }
             {
                 std::lock_guard<std::mutex> lock(self->m_mutex);
                 self->m_inFlight[index] = false;
-                if (err.isEmpty() && !body.isEmpty()) self->m_data[index] = body;
-                else if (self->m_error.isEmpty())     self->m_error = err;
+                if (ok) self->m_data[index] = body;
+                else if (self->m_error.isEmpty())
+                    self->m_error = err.isEmpty() ? QStringLiteral("empty segment") : err;
             }
             self->m_cv.notify_all();
-        });
+        }, wanted(), true, (attempt - 1) * kRetryStepMs);
 }
 
 void DashStream::evictFar(int keepAround) {
