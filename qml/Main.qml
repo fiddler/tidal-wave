@@ -796,6 +796,13 @@ ApplicationWindow {
         z: 9002
     }
 
+    // Every playback failure says so. Nothing listened to this signal before,
+    // so a failed load left a play button that did nothing and said nothing.
+    Connections {
+        target: player
+        function onError(message) { root.warn(message) }
+    }
+
     // The local library talks to the window, not to whichever page is open:
     // an import outlives the page that started it.
     Connections {

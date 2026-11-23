@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-23
+
+### Fixed
+
+- Play starts the current track again after a failed load or the end of the
+  queue. It used to do nothing, with no message.
+- Playback errors are shown. Nothing displayed them before.
+- A track that fails to load is tried once more before the error is shown,
+  so one network blip no longer stops the queue.
+- A load still running after 30 seconds says so.
+- A lossless stream with a segment that cannot be sized is retried, then
+  fails cleanly. It was played with a hole in it, which ended as
+  "unrecognized file format".
+- Scrolling the home page over a card row no longer jerks up and down.
+
 ## 2026-11-17
 
 ### Added

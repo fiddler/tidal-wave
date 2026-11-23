@@ -135,6 +135,21 @@ the failure at the mpv/CoreAudio boundary but does not prove whether the daemon,
 driver owned the deadlock. The recorder and paired stack samples were added to resolve that next
 time.
 
+### Play does nothing
+
+Not a jam: `playback.jsonl` shows `play-requested` followed only by `Set property: pause=false`,
+with `idleActive` true in the last snapshot. A load failed earlier (2026-11-19: `end-file` reason
+`error`, "unrecognized file format"), mpv went idle, and unpausing an empty player is a no-op. There
+was no feedback at all: nothing in QML listened to `Player::error` until 2026-11-23, so every
+playback error before that was silent. `Main.qml` now toasts it. `Player::playPause` reloads the
+current row when mpv holds no file, and `onErrorOccurred` reloads a failed track once by itself
+before reporting.
+
+The ffmpeg lines `could not find corresponding trex` / `trun track id unknown, no tfhd was found`
+mean the stream began with a `moof`, so the init segment was missing. Probable cause, not proven:
+a failed `DashStream` probe counted its segment as zero bytes and served a file with a hole. A
+probe is now retried and a failure breaks the stream instead.
+
 ### Crackle, not a jam
 
 A different shape, and the recorder does not catch it. Crackling or clicking on **any** cmd-tab,

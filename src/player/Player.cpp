@@ -120,6 +120,7 @@ void Player::setLoading(bool l) {
                 m_player->reloadAudioOutput(QStringLiteral("loading-30s"));
             }
             setLoading(false);
+            emit error(tr("Still loading after 30 seconds. Press play to try again."));
         });
     }
     // Armed before the early return below: picking a second track while the
@@ -306,6 +307,13 @@ void Player::playPause() {
     // at the offset the last run ended on.
     if (m_sessionRestored) {
         loadAndPlay(m_index, m_pendingSeekMs);
+        return;
+    }
+    // A failed load or the end of the queue leaves mpv idle with nothing in it,
+    // and unpausing that does nothing at all. Load the current row again.
+    if (!m_loading && !m_player->hasMedia()) {
+        if (m_index >= 0 && m_index < m_queue.count()) loadAndPlay(m_index);
+        else emit error(tr("Nothing to play. Pick a track first."));
         return;
     }
     if (m_player->playbackState() == MpvAudio::State::Playing)
@@ -747,11 +755,12 @@ void Player::onMediaStatusChanged(MpvAudio::Status status) {
         setLoading(false); break;
     case MpvAudio::Status::EndOfMedia:
         setLoading(false);
+        m_autoRetriedId = 0;
         next();
         break;
     case MpvAudio::Status::InvalidMedia:
+        // MpvAudio follows this with errorOccurred, which reports or retries.
         setLoading(false);
-        emit error("Invalid media");
         break;
     default: break;
     }
@@ -770,7 +779,18 @@ void Player::onErrorOccurred(const QString &msg) {
     setLoading(false);
     if (m_player) m_player->captureDiagnostics(QStringLiteral("player-error"));
     qWarning() << "Player error:" << msg;
-    emit error(msg);
+    // One silent retry per track: most load failures are a network blip, and
+    // the queue should not die of one. A second failure is reported, and the
+    // play button then loads the row again.
+    const qlonglong id = m_currentTrack.id;
+    if (id != 0 && id != m_autoRetriedId && m_index >= 0 && m_index < m_queue.count()) {
+        m_autoRetriedId = id;
+        loadAndPlay(m_index, m_lastSavedPosition);
+        return;
+    }
+    emit error(m_currentTrack.title.isEmpty()
+        ? tr("Playback failed: %1. Press play to try again.").arg(msg)
+        : tr("Could not play “%1”: %2. Press play to try again.").arg(m_currentTrack.title, msg));
 }
 
 void Player::cancelPreload() {

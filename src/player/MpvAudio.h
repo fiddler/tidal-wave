@@ -49,6 +49,8 @@ public:
     void   setPosition(qint64 ms);
 
     State playbackState() const { return m_state; }
+    // False once a file ended or failed to load: play() then has nothing to resume.
+    bool  hasMedia() const { return !m_idle; }
 
     // Volume is 0.0–1.0 here, as QAudioOutput had it; mpv works in 0–100.
     double volume() const { return m_volume; }

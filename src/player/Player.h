@@ -208,6 +208,7 @@ private:
     bool                 m_sessionRestored   = false;
     qint64               m_pendingSeekMs     = 0;
     qint64               m_lastSavedPosition = 0;
+    qlonglong m_autoRetriedId = 0;   // track already reloaded once after an error
 
     // Cast state (non-null while casting; owned by CastManager).
     CastSession         *m_castSession   = nullptr;

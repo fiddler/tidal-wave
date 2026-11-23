@@ -172,23 +172,10 @@ Item {
                     }
 
                     // A plain vertical wheel belongs to the page behind the row.
-                    if (dy !== 0) {
-                        var p = root.parent
-                        var scrollParent = null
-                        while (p) {
-                            if (p.contentY !== undefined && p.contentHeight !== undefined && p.flickableDirection !== undefined) {
-                                scrollParent = p
-                                break
-                            }
-                            p = p.parent
-                        }
-                        if (scrollParent) {
-                            var maxY = Math.max(0, scrollParent.contentHeight - scrollParent.height)
-                            scrollParent.contentY = Math.max(0, Math.min(maxY, scrollParent.contentY - dy * step))
-                            wheel.accepted = true
-                            return
-                        }
-                    }
+                    // Leave it unaccepted so the page's own Flickable takes it:
+                    // setting its contentY from here fought the Flickable's
+                    // momentum whenever the pointer crossed between a row and
+                    // the gaps around it, and the page jerked up and down.
                     wheel.accepted = false
                 }
             }

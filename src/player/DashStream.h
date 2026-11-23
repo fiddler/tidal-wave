@@ -78,6 +78,7 @@ private:
     DashStream(quint64 id, QStringList urls);
 
     void startProbe();
+    void probeSegment(int index, int attempt);
     void ensureSegment(int index);           // caller holds m_mutex
     void evictFar(int keepAround);           // caller holds m_mutex
 
@@ -86,6 +87,7 @@ private:
     // boundary when it opens a fragmented MP4; serving those reads from here
     // keeps the scan off the network entirely.
     static constexpr qint64 kHead = 16384;
+    static constexpr int kProbeAttempts = 3;
 
     const quint64 m_id;
     const QStringList m_urls;
@@ -103,5 +105,6 @@ private:
     qint64 m_pos      = 0;                   // current read offset
     int    m_probed   = 0;
     bool   m_aborted  = false;
+    bool   m_broken   = false;               // a probe failed: reads fail, no holes
     QString m_error;
 };

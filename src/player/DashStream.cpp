@@ -158,36 +158,54 @@ void DashStream::startProbe() {
     // every fragment boundary to build its index. Measured cold, each of those
     // small reads pulled a whole 512 KB segment and first audio took ~7 s.
     // Serving them from here keeps the scan off the network completely.
-    auto self = shared_from_this();
-    for (int i = 0; i < m_urls.size(); ++i) {
-        DashNet::instance()->request(QUrl(m_urls.at(i)), 0, kHead - 1,
-            [self, i](QByteArray body, qint64 size, QString err) {
-                {
-                    std::lock_guard<std::mutex> lock(self->m_mutex);
-                    self->m_head[i] = body;
-                    self->m_size[i] = err.isEmpty() && size > 0 ? size : 0;
-                    if (!err.isEmpty() && self->m_error.isEmpty()) self->m_error = err;
-                    if (++self->m_probed == self->m_urls.size()) {
-                        qint64 run = 0;
-                        for (int k = 0; k < self->m_urls.size(); ++k) {
-                            self->m_offset[k] = run;
-                            run += self->m_size[k];
-                        }
-                        self->m_total = run;
-                        qInfo() << "[dash] ready in" << g_clock.elapsed()
-                                << "ms," << self->m_urls.size() << "segments,"
-                                << run << "bytes";
-                    }
-                }
-                self->m_cv.notify_all();
-            });
-    }
+    for (int i = 0; i < m_urls.size(); ++i)
+        probeSegment(i, 1);
 
     // Pull the opening segments in full while the probe runs, so playback has
     // real audio to start on the moment the offsets are known.
     std::lock_guard<std::mutex> lock(m_mutex);
     for (int i = 0; i < qMin<qsizetype>(2, m_urls.size()); ++i)
         ensureSegment(i);
+}
+
+void DashStream::probeSegment(int index, int attempt) {
+    auto self = shared_from_this();
+    DashNet::instance()->request(QUrl(m_urls.at(index)), 0, kHead - 1,
+        [self, index, attempt](QByteArray body, qint64 size, QString err) {
+            const bool ok = err.isEmpty() && size > 0;
+            if (!ok && attempt < kProbeAttempts) {
+                self->probeSegment(index, attempt + 1);
+                return;
+            }
+            {
+                std::lock_guard<std::mutex> lock(self->m_mutex);
+                if (ok) {
+                    self->m_head[index] = body;
+                    self->m_size[index] = size;
+                } else {
+                    // A segment of unknown size cannot be laid out. Counting it
+                    // as empty handed ffmpeg a file with a hole in it, and with
+                    // the init segment gone, "unrecognized file format".
+                    self->m_size[index] = 0;
+                    self->m_broken = true;
+                    if (self->m_error.isEmpty())
+                        self->m_error = err.isEmpty() ? QStringLiteral("empty segment") : err;
+                    qWarning() << "[dash] probe of segment" << index << "failed:" << self->m_error;
+                }
+                if (++self->m_probed == self->m_urls.size()) {
+                    qint64 run = 0;
+                    for (int k = 0; k < self->m_urls.size(); ++k) {
+                        self->m_offset[k] = run;
+                        run += self->m_size[k];
+                    }
+                    self->m_total = run;
+                    qInfo() << "[dash] ready in" << g_clock.elapsed()
+                            << "ms," << self->m_urls.size() << "segments,"
+                            << run << "bytes";
+                }
+            }
+            self->m_cv.notify_all();
+        });
 }
 
 void DashStream::ensureSegment(int index) {
@@ -219,13 +237,13 @@ void DashStream::evictFar(int keepAround) {
 qint64 DashStream::totalSize() {
     std::unique_lock<std::mutex> lock(m_mutex);
     m_cv.wait(lock, [this] { return m_total >= 0 || m_aborted; });
-    return m_aborted ? MPV_ERROR_UNSUPPORTED : m_total;
+    return m_aborted || m_broken ? MPV_ERROR_UNSUPPORTED : m_total;
 }
 
 qint64 DashStream::seekTo(qint64 offset) {
     std::unique_lock<std::mutex> lock(m_mutex);
     m_cv.wait(lock, [this] { return m_total >= 0 || m_aborted; });
-    if (m_aborted || offset < 0 || offset > m_total) return MPV_ERROR_UNSUPPORTED;
+    if (m_aborted || m_broken || offset < 0 || offset > m_total) return MPV_ERROR_UNSUPPORTED;
     m_pos = offset;
     return m_pos;
 }
@@ -235,7 +253,7 @@ qint64 DashStream::readAt(char *buf, qint64 want) {
 
     // The offsets come from the probe, so wait for it before mapping m_pos.
     m_cv.wait(lock, [this] { return m_total >= 0 || m_aborted; });
-    if (m_aborted) return -1;
+    if (m_aborted || m_broken) return -1;
     if (m_pos >= m_total) return 0;                     // clean EOF
 
     int idx = 0;                                        // segment holding m_pos
