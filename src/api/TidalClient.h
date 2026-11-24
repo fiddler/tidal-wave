@@ -132,7 +132,7 @@ public:
     void fetchPlaylist           (const QString &uuid,  std::function<void(Playlist,QString)> cb);
     void editPlaylist            (const QString &uuid,  const QString &title, const QString &description,
                                   std::function<void(bool)> cb);
-    void addTracksToPlaylist     (const QString &uuid,  const QList<qint64> &trackIds, std::function<void(bool)> cb);
+    void addTracksToPlaylist     (const QString &uuid,  const QList<qint64> &trackIds, std::function<void(bool, QString)> cb);
     void moveTrackInPlaylist     (const QString &uuid,  int fromIndex, int toIndex, std::function<void(bool)> cb);
     void removeTrackFromPlaylist (const QString &uuid,  int itemIndex,  std::function<void(bool)> cb);
 

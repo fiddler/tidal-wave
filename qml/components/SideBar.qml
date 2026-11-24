@@ -274,12 +274,14 @@ Rectangle {
             Layout.fillHeight: true
 
             DragScrollEdge {
+                id: plTopEdge
                 view: playlistList
                 direction: -1
                 anchors { left: parent.left; right: parent.right; top: parent.top }
                 onDroppedAt: (index, source) => playlistList.addTracksAt(index, source)
             }
             DragScrollEdge {
+                id: plBottomEdge
                 view: playlistList
                 direction: 1
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
@@ -319,23 +321,25 @@ Rectangle {
                             SyncState.fail(err && err.length > 0 ? err : "Could not read that album")
                             return
                         }
-                        var ids = []
-                        for (var i = 0; i < tracks.length; i++) ids.push(tracks[i].id)
-                        playlistList.postTracks(uuid, ids)
+                        playlistList.postTracks(uuid, tracks)
                     })
                     return
                 }
-                var trackIds = []
-                for (var j = 0; j < source.payload.length; j++) trackIds.push(source.payload[j].id)
-                if (trackIds.length === 0) return
+                // Copied: the payload is cleared when the drag ends.
+                var rows = source.payload.slice()
+                if (rows.length === 0) return
                 SyncState.begin("Adding to " + title)
-                playlistList.postTracks(uuid, trackIds)
+                playlistList.postTracks(uuid, rows)
             }
 
-            function postTracks(uuid, ids) {
-                bridge.addTracksToPlaylist(uuid, ids, function(ok) {
-                    if (ok) SyncState.end()
-                    else    SyncState.fail("Could not add to that playlist")
+            // Rows, not ids: the bridge swaps a dead row for its twin.
+            function postTracks(uuid, rows) {
+                bridge.addTracksToPlaylist(uuid, rows, function(ok, skipped, err) {
+                    if (!ok) { SyncState.fail(err && err.length > 0 ? err : "Could not add to that playlist"); return }
+                    SyncState.end()
+                    if (skipped > 0)
+                        Window.window.warn(skipped === 1 ? "1 track is no longer on Tidal and was left out"
+                                                         : skipped + " tracks are no longer on Tidal and were left out")
                 })
             }
 
@@ -388,8 +392,14 @@ Rectangle {
                     id: plDrop
                     anchors.fill: parent
                     keys: ["tidalwave/tracks"]
-                    property bool willAccept: containsDrag && playlistList.accepts(drag.source)
-                    property bool willRefuse: containsDrag && playlistList.refuses(drag.source)
+                    // Under an edge strip the row gets no drag of its own; the
+                    // strip names it, and DragState carries the kind.
+                    readonly property bool underEdge: DragState.active
+                        && (plTopEdge.hoverIndex === plDelegate.rowIndex || plBottomEdge.hoverIndex === plDelegate.rowIndex)
+                    property bool willAccept: (containsDrag && playlistList.accepts(drag.source))
+                        || (underEdge && (DragState.kind === "tidal" || DragState.kind === "album"))
+                    property bool willRefuse: (containsDrag && playlistList.refuses(drag.source))
+                        || (underEdge && DragState.kind === "local")
                     onEntered: (d) => {
                         if (!playlistList.accepts(d.source) && !playlistList.refuses(d.source))
                             d.accepted = false
@@ -538,12 +548,14 @@ Rectangle {
             visible: localPlaylistList.count > 0
 
             DragScrollEdge {
+                id: lplTopEdge
                 view: localPlaylistList
                 direction: -1
                 anchors { left: parent.left; right: parent.right; top: parent.top }
                 onDroppedAt: (index, source) => localPlaylistList.addTracksAt(index, source)
             }
             DragScrollEdge {
+                id: lplBottomEdge
                 view: localPlaylistList
                 direction: 1
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
@@ -601,12 +613,16 @@ Rectangle {
                     id: lplDrop
                     anchors.fill: parent
                     keys: ["tidalwave/tracks"]
-                    property bool willAccept: containsDrag && drag.source
-                                              && drag.source.kind === "local"
+                    readonly property bool underEdge: DragState.active
+                        && (lplTopEdge.hoverIndex === lplDelegate.rowIndex || lplBottomEdge.hoverIndex === lplDelegate.rowIndex)
+                    property bool willAccept: (containsDrag && drag.source
+                                              && drag.source.kind === "local")
+                                              || (underEdge && DragState.kind === "local")
                     // Same courtesy in the other direction: a Tidal track or
                     // album has no file on disk to point playlist_items at.
-                    property bool willRefuse: containsDrag && drag.source
-                                              && drag.source.kind !== "local"
+                    property bool willRefuse: (containsDrag && drag.source
+                                              && drag.source.kind !== "local")
+                                              || (underEdge && DragState.kind !== "local")
                     onEntered: (d) => { if (!d.source) d.accepted = false }
                     onDropped: (d) => {
                         if (!d.source) { d.accepted = false; return }

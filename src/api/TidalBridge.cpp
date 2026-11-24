@@ -6,6 +6,7 @@
 #include <QClipboard>
 #include <QDebug>
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace {
@@ -634,13 +635,48 @@ void TidalBridge::refreshPlaylistMeta(const QString &uuid) {
     });
 }
 
-void TidalBridge::addTracksToPlaylist(const QString &uuid, const QVariantList &trackIds, QJSValue cb) {
-    QList<qint64> ids;
-    for (const QVariant &v : trackIds) ids << v.toLongLong();
-    m_client->addTracksToPlaylist(uuid, ids, [this, uuid, cb](bool success) mutable {
-        if (success) refreshPlaylistMeta(uuid);
-        call(cb, { success });
-    });
+// Takes track maps, or bare ids for callers that hold nothing more. A dead
+// row (available false) is not posted as is: Tidal answers 404 "Track not
+// found" for its id and the whole batch fails with it. Its twin goes in its
+// place, and a row without one is left out and counted.
+// cb(success, skipped, error).
+void TidalBridge::addTracksToPlaylist(const QString &uuid, const QVariantList &tracks, QJSValue cb) {
+    struct Pending { QList<qint64> ids; int waiting = 0; int skipped = 0; };
+    auto state = std::make_shared<Pending>();
+    state->ids.resize(tracks.size());
+    QList<std::pair<int, Track>> dead;
+    for (int i = 0; i < tracks.size(); ++i) {
+        const QVariant &v = tracks[i];
+        if (v.typeId() != QMetaType::QVariantMap) { state->ids[i] = v.toLongLong(); continue; }
+        const QVariantMap m = v.toMap();
+        if (m.value(QStringLiteral("available"), true).toBool()) {
+            state->ids[i] = m.value(QStringLiteral("id")).toLongLong();
+            continue;
+        }
+        Track t;
+        t.id          = m.value(QStringLiteral("id")).toLongLong();
+        t.isrc        = m.value(QStringLiteral("isrc")).toString();
+        t.album.title = m.value(QStringLiteral("albumTitle")).toString();
+        dead.append({i, t});
+    }
+    auto post = [this, uuid, state, cb]() mutable {
+        QList<qint64> ids;
+        for (qint64 id : state->ids) if (id > 0) ids << id;
+        if (ids.isEmpty()) { call(cb, { false, state->skipped, QStringLiteral("Not streamed on Tidal any more") }); return; }
+        m_client->addTracksToPlaylist(uuid, ids, [this, uuid, state, cb](bool success, QString err) mutable {
+            if (success) refreshPlaylistMeta(uuid);
+            call(cb, { success, state->skipped, err });
+        });
+    };
+    if (dead.isEmpty()) { post(); return; }
+    state->waiting = dead.size();
+    for (const auto &[index, t] : dead) {
+        m_client->fetchTwin(t, [state, index, post](Track twin, QString) mutable {
+            if (twin.id > 0) state->ids[index] = twin.id;
+            else             ++state->skipped;
+            if (--state->waiting == 0) post();
+        });
+    }
 }
 
 void TidalBridge::moveTrackInPlaylist(const QString &uuid, int fromIndex, int toIndex, QJSValue cb) {

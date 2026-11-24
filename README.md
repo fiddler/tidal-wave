@@ -93,7 +93,8 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 > - **Dead playlist tracks play again.** A playlist keeps a track's old id
 >   after Tidal stops streaming it. Such a row now plays from another release
 >   of the same recording, found by ISRC; one with no other release is named
->   and skipped
+>   and skipped. Adding one to a playlist adds that other release, where
+>   Tidal used to refuse the whole batch
 > - **The sign-in token stays with Tidal's API.** It was also sent with every
 >   audio file and cover fetched, to whichever host served them
 >

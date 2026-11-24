@@ -79,7 +79,8 @@ public:
     Q_INVOKABLE void fetchPlaylistMeta      (const QString &uuid, QJSValue cb);
     Q_INVOKABLE void editPlaylist           (const QString &uuid, const QString &title,
                                              const QString &description, QJSValue cb);
-    Q_INVOKABLE void addTracksToPlaylist    (const QString &uuid, const QVariantList &trackIds, QJSValue cb);
+    // Track maps or ids; cb(success, skipped, error). See the .cpp.
+    Q_INVOKABLE void addTracksToPlaylist    (const QString &uuid, const QVariantList &tracks, QJSValue cb);
     Q_INVOKABLE void moveTrackInPlaylist    (const QString &uuid, int fromIndex, int toIndex, QJSValue cb);
     Q_INVOKABLE void removeTrackFromPlaylist(const QString &uuid, int itemIndex, QJSValue cb);
     Q_INVOKABLE QVariantList getUserPlaylists() const;

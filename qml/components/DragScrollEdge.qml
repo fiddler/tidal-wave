@@ -21,6 +21,17 @@ Item {
 
     signal droppedAt(int index, var source)
 
+    // The strip covers the row nearest the edge and takes the drag from it, so
+    // that row never sees containsDrag. This names it, so it can still light
+    // up as the target the drop is forwarded to. -1 when nothing is.
+    property int hoverIndex: -1
+    property real pointerY: 0
+    function updateHover() {
+        if (!sensor.containsDrag || !view) { hoverIndex = -1; return }
+        var p = root.mapToItem(view.contentItem, width / 2, pointerY)
+        hoverIndex = view.indexAt(p.x, p.y)
+    }
+
     height: 32
     z: 5
 
@@ -49,7 +60,15 @@ Item {
         id: sensor
         anchors.fill: parent
         keys: ["tidalwave/tracks"]
+        // Nothing to scroll towards: stand aside so the row underneath takes
+        // the drag itself.
+        enabled: root.canScroll
+        onEntered: (d) => { root.pointerY = d.y; root.updateHover() }
+        onPositionChanged: (d) => { root.pointerY = d.y; root.updateHover() }
+        onExited: root.hoverIndex = -1
+        onEnabledChanged: if (!enabled) root.hoverIndex = -1
         onDropped: (drop) => {
+            root.hoverIndex = -1
             if (!root.view) { drop.accepted = false; return }
             var p = root.mapToItem(root.view.contentItem, drop.x, drop.y)
             root.droppedAt(root.view.indexAt(p.x, p.y), drop.source)
@@ -65,6 +84,7 @@ Item {
             var v = root.view
             v.contentY = Math.max(0, Math.min(v.contentHeight - v.height,
                                               v.contentY + root.direction * root.pixelsPerTick))
+            root.updateHover()
         }
     }
 

@@ -224,6 +224,9 @@ out of the real credentials file.
   subStatus 4005 "Asset is not ready for playback". `tracks?isrc=<isrc>` lists the streamed
   releases of the same recording (2026-11-17: 36 dead rows in the first playlists scanned, 9 of
   12 looked up had a twin). `Player::resolveTwin` swaps one in.
+- Adding a dead id to a playlist answers 404 subStatus 2001 "Track not found", and with
+  `onArtifactNotFound=FAIL` the whole batch is refused (2026-11-24, Codeloop2's "Strangers").
+  `TidalBridge::addTracksToPlaylist` takes track maps and posts a dead row's twin instead.
 - `playbackinfopostpaywall` serves this client FLAC (93 of 93 streams in `playback.jsonl`,
   28 Aug to 22 Sep). Upstream's device-code client gets 320 kbps AAC from it.
 

@@ -584,9 +584,7 @@ Item {
                     for (var i = 0; i < picked.length; i++) localIds.push(picked[i].localId)
                     localPlaylistPicker.openFor(localIds)
                 } else {
-                    var ids = []
-                    for (var j = 0; j < picked.length; j++) ids.push(picked[j].id)
-                    playlistPicker.openFor(ids)
+                    playlistPicker.openFor(picked)
                 }
             }
         }
@@ -692,7 +690,7 @@ Item {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
-        property var pendingTrackIds: []
+        property var pendingTrackIds: []   // track maps: the bridge swaps dead rows for twins
 
         function openFor(trackIds) {
             pendingTrackIds = trackIds
@@ -748,7 +746,12 @@ Item {
                         HoverHandler { id: plHov2 }
                         TapHandler {
                             onTapped: {
-                                bridge.addTracksToPlaylist(model.uuid, playlistPicker.pendingTrackIds, function(ok) {})
+                                bridge.addTracksToPlaylist(model.uuid, playlistPicker.pendingTrackIds, function(ok, skipped, err) {
+                                    var w = Window.window
+                                    if (!w) return
+                                    if (!ok) w.warn(err && err.length > 0 ? err : "Could not add to that playlist")
+                                    else if (skipped > 0) w.warn(skipped + (skipped === 1 ? " track is" : " tracks are") + " no longer on Tidal and left out")
+                                })
                                 playlistPicker.close()
                             }
                         }
