@@ -212,6 +212,12 @@ void TidalApi::deleteApi(const QString &endpoint, const QUrlQuery &params, JsonC
             cb({}, err.errorString());
             return;
         }
+        // A refusal carries a JSON body too; the HTTP status decides.
+        if (reply->error() != QNetworkReply::NoError) {
+            auto obj = doc.object();
+            cb(obj, obj["userMessage"].toString(reply->errorString()));
+            return;
+        }
         cb(doc.object(), {});
     });
 }

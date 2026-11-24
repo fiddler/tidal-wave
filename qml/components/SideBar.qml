@@ -431,6 +431,16 @@ Rectangle {
                     TapHandler {
                         onTapped: plDelegate.activate()
                     }
+                    TapHandler {
+                        acceptedButtons: Qt.RightButton
+                        onTapped: (ev) => {
+                            if (!bridge.ownsPlaylist(model.uuid)) return
+                            plRowMenu.uuid  = model.uuid
+                            plRowMenu.playlistTitle = model.title
+                            var p = plRect.mapToItem(root, ev.position.x, ev.position.y)
+                            plRowMenu.popup(root, p.x, p.y)
+                        }
+                    }
                     Column {
                         anchors.left: parent.left
                         anchors.leftMargin: 16
@@ -841,6 +851,20 @@ Rectangle {
         // so this first load comes back empty. Run it again once the session
         // checks out for real.
         function onSessionRecovered() { loadPlaylists() }
+    }
+
+    // Right-click on a playlist you created. One menu for every row.
+    Menu {
+        id: plRowMenu
+        property string uuid: ""
+        property string playlistTitle: ""
+        background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 8; implicitWidth: 200 }
+        IconMenuItem {
+            text: "Delete playlist"
+            iconName: "trash"
+            textColor: Theme.red
+            onTriggered: Window.window.confirmDeletePlaylist(plRowMenu.uuid, plRowMenu.playlistTitle)
+        }
     }
 
     Connections {

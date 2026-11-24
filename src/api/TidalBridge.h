@@ -81,6 +81,10 @@ public:
                                              const QString &description, QJSValue cb);
     // Track maps or ids; cb(success, skipped, error). See the .cpp.
     Q_INVOKABLE void addTracksToPlaylist    (const QString &uuid, const QVariantList &tracks, QJSValue cb);
+    // cb(success, error). Drops the playlist from the cached collection.
+    Q_INVOKABLE void deletePlaylist         (const QString &uuid, QJSValue cb);
+    // True for a playlist this account created, the only kind it can delete.
+    Q_INVOKABLE bool ownsPlaylist           (const QString &uuid) const;
     Q_INVOKABLE void moveTrackInPlaylist    (const QString &uuid, int fromIndex, int toIndex, QJSValue cb);
     Q_INVOKABLE void removeTrackFromPlaylist(const QString &uuid, int itemIndex, QJSValue cb);
     Q_INVOKABLE QVariantList getUserPlaylists() const;

@@ -687,6 +687,12 @@ void TidalClient::addTracksToPlaylist(const QString &uuid, const QList<qint64> &
         });
 }
 
+// Answers 204 and needs no ETag (probed 2026-11-24).
+void TidalClient::deletePlaylist(const QString &uuid, std::function<void(bool, QString)> cb) {
+    m_api->deleteApi(QStringLiteral("playlists/%1").arg(uuid), {},
+        [cb](QJsonObject, QString e) { cb(e.isEmpty(), e); });
+}
+
 // Reordering posts to the item's own index with the destination in the form,
 // guarded by the playlist ETag exactly like add and remove.
 void TidalClient::moveTrackInPlaylist(const QString &uuid, int fromIndex, int toIndex,

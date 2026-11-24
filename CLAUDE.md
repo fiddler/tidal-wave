@@ -227,6 +227,7 @@ out of the real credentials file.
 - Adding a dead id to a playlist answers 404 subStatus 2001 "Track not found", and with
   `onArtifactNotFound=FAIL` the whole batch is refused (2026-11-24, Codeloop2's "Strangers").
   `TidalBridge::addTracksToPlaylist` takes track maps and posts a dead row's twin instead.
+- `DELETE playlists/<uuid>` deletes a playlist: 204, no ETag needed (probed 2026-11-24).
 - `playbackinfopostpaywall` serves this client FLAC (93 of 93 streams in `playback.jsonl`,
   28 Aug to 22 Sep). Upstream's device-code client gets 320 kbps AAC from it.
 
@@ -241,6 +242,9 @@ out of the real credentials file.
 - **A list animates a reorder only if its model is told about the move.** Assigning a new JS
   array is a reset. The queue panel reads `player.queueModel` (`QueueModel::sync` diffs each edit
   into a move, removal or insertion); the sidebar syncs its `ListModel` by uuid.
+- **Never declare `title` on a `Menu`** (or another FINAL property). The app builds and
+  tests pass, then the launch dies with "Type SideBar unavailable" (2026-11-24). The QML
+  tests do not load `SideBar.qml`, so start the binary once after touching it.
 - **Context menu rows are `IconMenuItem`**, with a `VectorIcon` name, not an emoji in the label.
 
 ## Misc

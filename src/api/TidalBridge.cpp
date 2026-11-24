@@ -679,6 +679,28 @@ void TidalBridge::addTracksToPlaylist(const QString &uuid, const QVariantList &t
     }
 }
 
+void TidalBridge::deletePlaylist(const QString &uuid, QJSValue cb) {
+    m_client->deletePlaylist(uuid, [this, uuid, cb](bool success, QString err) mutable {
+        if (success) {
+            for (int i = 0; i < m_favoritePlaylists.size(); ++i) {
+                if (m_favoritePlaylists[i].uuid != uuid) continue;
+                m_favoritePlaylists.removeAt(i);
+                emit favoritePlaylistsChanged();
+                break;
+            }
+        }
+        call(cb, { success, err });
+    });
+}
+
+bool TidalBridge::ownsPlaylist(const QString &uuid) const {
+    const qint64 uid = m_client->userId();
+    if (uid <= 0) return false;
+    for (const Playlist &p : m_favoritePlaylists)
+        if (p.uuid == uuid) return p.creatorId == uid;
+    return false;
+}
+
 void TidalBridge::moveTrackInPlaylist(const QString &uuid, int fromIndex, int toIndex, QJSValue cb) {
     m_client->moveTrackInPlaylist(uuid, fromIndex, toIndex, [this, cb](bool success) mutable {
         call(cb, { success });

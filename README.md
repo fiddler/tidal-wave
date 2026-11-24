@@ -66,6 +66,8 @@ Tidal Wave is not affiliated with TIDAL Music AS.
 > - **Playlist editing by selection.** ⌫ or Delete removes the selected
 >   tracks from a Tidal or local playlist, "Remove from playlist" takes the
 >   whole selection, and more than one track asks first
+> - **Delete a playlist.** A Delete button on a playlist you created, or
+>   right-click it in the sidebar
 > - **Back remembers the scroll.** Returning to a playlist lands where you
 >   left it, not at the top
 > - **Playback that recovers.** A failed load is tried again before any error

@@ -788,6 +788,65 @@ ApplicationWindow {
     function notify(message) { toast.show(message) }
     function warn(message)   { toast.warn(message) }
 
+    // One confirm for the playlist page and the sidebar row alike.
+    function confirmDeletePlaylist(uuid, title) {
+        deletePlaylistPopup.uuid  = uuid
+        deletePlaylistPopup.title = title || ""
+        deletePlaylistPopup.busy  = false
+        deletePlaylistPopup.open()
+    }
+
+    Popup {
+        id: deletePlaylistPopup
+        objectName: "deletePlaylistPopup"
+        property string uuid: ""
+        property string title: ""
+        property bool   busy: false
+        anchors.centerIn: Overlay.overlay
+        width: 360
+        modal: true; focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 20
+        background: Rectangle { color: Theme.surfaceHigh; border.color: Theme.border; radius: 12 }
+
+        function run() {
+            if (busy) return
+            busy = true
+            var uuid = deletePlaylistPopup.uuid
+            var title = deletePlaylistPopup.title
+            bridge.deletePlaylist(uuid, function(ok, err) {
+                deletePlaylistPopup.busy = false
+                deletePlaylistPopup.close()
+                if (!ok) { root.warn(err && err.length > 0 ? err : "Could not delete that playlist"); return }
+                if (offline.status(uuid).state !== "none") offline.unpin(uuid)
+                if (root.currentPage === "playlist" && root._currentNavParams.playlistUuid === uuid)
+                    root.navigate("home")
+                root.notify("Deleted “" + title + "”")
+            })
+        }
+
+        Column {
+            width: parent.width
+            spacing: 14
+            Text { text: "Delete playlist?"; color: Theme.textPrimary; font.pixelSize: 16; font.bold: true }
+            Text {
+                width: parent.width
+                text: "“" + deletePlaylistPopup.title + "” will be deleted from your Tidal account."
+                color: Theme.textSec; font.pixelSize: 13; wrapMode: Text.WordWrap
+            }
+            Row {
+                spacing: 10; anchors.right: parent.right
+                PillButton { text: "Cancel"; accent: false; onClicked: deletePlaylistPopup.close() }
+                PillButton {
+                    text: deletePlaylistPopup.busy ? "Deleting…" : "Delete"
+                    accent: true
+                    enabled: !deletePlaylistPopup.busy
+                    onClicked: deletePlaylistPopup.run()
+                }
+            }
+        }
+    }
+
     Toast {
         id: toast
         anchors.horizontalCenter: parent.horizontalCenter

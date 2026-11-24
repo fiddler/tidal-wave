@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-24
+
+### Added
+
+- Delete a Tidal playlist you created: a Delete button on its page, or
+  right-click it in the sidebar. Both ask first. An offline copy goes with it.
+
+### Fixed
+
+- The playlist under the pointer lights up during a drag. The first and last
+  visible rows sat under the sidebar's scroll strips and never did.
+- Tracks dragged from a playlist with a dead row are added. Tidal refused the
+  whole batch over the dead id; that row now goes in as another release of the
+  same recording, or is left out with a message. Same for "Add to playlist".
+- A refused favourite removal reports the error instead of passing as done.
+
 ## 2026-11-23
 
 ### Fixed

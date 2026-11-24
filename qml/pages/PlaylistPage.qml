@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Window
 import TidalWave
 
 Rectangle {
@@ -41,6 +42,20 @@ Rectangle {
     }
 
     readonly property bool isUserPlaylist: playlistType === "USER"
+    // USER covers followed playlists too; only the creator may delete. Read
+    // again as the collection pages in, which can land after this page opens.
+    property bool ownPlaylist: false
+    function refreshOwn() {
+        ownPlaylist = isUserPlaylist && typeof bridge.ownsPlaylist === "function"
+                      && bridge.ownsPlaylist(playlistUuid)
+    }
+    onIsUserPlaylistChanged: refreshOwn()
+    Component.onCompleted: refreshOwn()
+    Connections {
+        target: bridge
+        ignoreUnknownSignals: true
+        function onFavoritePlaylistsChanged() { root.refreshOwn() }
+    }
 
     // Records this playlist as the "playing from" source, then starts playback.
     function playFrom(list, i) {
@@ -65,7 +80,7 @@ Rectangle {
         }
     }
 
-    onPlaylistUuidChanged: if (playlistUuid.length > 0) { loadPlaylist(); refreshOffline() }
+    onPlaylistUuidChanged: { refreshOwn(); if (playlistUuid.length > 0) { loadPlaylist(); refreshOffline() } }
 
     // The list as it will look once the move lands. Mirrors the ordering the
     // server is asked for, so the optimistic view matches the result.
@@ -410,6 +425,16 @@ Rectangle {
                             glyph: "✎"
                             accent: false
                             onClicked: editPlaylistPopup.begin()
+                        }
+
+                        PillButton {
+                            // Only the creator can delete; a followed USER
+                            // playlist would answer 403.
+                            visible: root.ownPlaylist
+                            text: "Delete"
+                            glyph: "trash"
+                            accent: false
+                            onClicked: Window.window.confirmDeletePlaylist(root.playlistUuid, root.playlistTitle)
                         }
 
                         // Offline pin — the button doubles as the state
